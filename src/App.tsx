@@ -1,0 +1,46 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Categories from './pages/Categories';
+import TemplateEditor from './pages/TemplateEditor';
+import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar';
+
+const ProtectedLayout = () => {
+  const isAdmin = localStorage.getItem('isAdmin') === 'true';
+
+  if (!isAdmin) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-50">
+      <Navbar />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-8 max-w-7xl mx-auto">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/editor" element={<TemplateEditor />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
+  );
+}

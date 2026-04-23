@@ -1,0 +1,5 @@
+{
+  "name": "Poster Template Admin",
+  "description": "A professional admin panel for managing poster categories and creating templates with editable photo frames using Konva.",
+  "requestFramePermissions": []
+}
