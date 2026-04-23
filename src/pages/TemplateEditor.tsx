@@ -1,25 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Transformer } from 'react-konva';
 import useImage from 'use-image';
-import { Upload, Save, Trash2, Maximize2, Move, Circle as CircleIcon, Square, RectangleHorizontal, ChevronLeft } from 'lucide-react';
+import { Upload, Save, Move, Circle as CircleIcon, Square, RectangleHorizontal, ChevronLeft } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PhotoFrame } from '../types';
-import { motion } from 'motion/react';
+import { templateService } from '../services/templateService';
 
 export default function TemplateEditor() {
   const [searchParams] = useSearchParams();
   const categoryId = searchParams.get('categoryId');
-  
+  const templateId = searchParams.get('templateId');
+
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
   const [bgImage] = useImage(backgroundImageUrl || '');
-  
+  const [templateName, setTemplateName] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [thumbnailKey, setThumbnailKey] = useState('');
+  const [templateKey, setTemplateKey] = useState('');
+  const [isPremium, setIsPremium] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
   const [frame, setFrame] = useState<PhotoFrame>({
     shape: 'rectangle',
     x: 100,
     y: 100,
     width: 200,
     height: 150,
-    radius: 0
+    radius: 0,
   });
 
   const [selected, setSelected] = useState(false);
@@ -36,6 +45,7 @@ export default function TemplateEditor() {
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+
     if (file) {
       const url = URL.createObjectURL(file);
       setBackgroundImageUrl(url);
@@ -44,6 +54,7 @@ export default function TemplateEditor() {
 
   const handleShapeChange = (shape: 'circle' | 'square' | 'rectangle') => {
     const newFrame = { ...frame, shape };
+
     if (shape === 'circle') {
       const size = Math.min(frame.width, frame.height);
       newFrame.width = size;
@@ -57,6 +68,7 @@ export default function TemplateEditor() {
     } else {
       newFrame.radius = 0;
     }
+
     setFrame(newFrame);
   };
 
@@ -65,7 +77,6 @@ export default function TemplateEditor() {
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    // Reset scale to 1 and update width/height
     node.scaleX(1);
     node.scaleY(1);
 
@@ -88,14 +99,48 @@ export default function TemplateEditor() {
     setFrame(updatedFrame);
   };
 
-  const handleSave = () => {
-    const templateData = {
-      categoryId,
-      photoFrame: frame,
-      bannerImage: backgroundImageUrl ? 'base64_or_url_placeholder' : null
+  const handleSave = async () => {
+    if (!categoryId) {
+      setError('Category ID is missing. Please open the editor from a category.');
+      return;
+    }
+
+    if (!templateName.trim() || !thumbnailKey.trim() || !templateKey.trim()) {
+      setError('Template name, thumbnail key, and template key are required.');
+      return;
+    }
+
+    const payload = {
+      name: templateName,
+      type: 'IMAGE' as const,
+      category_id: categoryId,
+      thumbnail_key: thumbnailKey,
+      template_key: templateKey,
+      config_json: {
+        background_preview: backgroundImageUrl,
+        photo_frame: frame,
+      },
+      is_premium: isPremium,
+      language,
     };
-    console.log('Saved Template JSON:', JSON.stringify(templateData, null, 2));
-    alert('Template saved successfully! Check console for JSON output.');
+
+    setError('');
+    setSuccessMessage('');
+    setIsSaving(true);
+
+    try {
+      if (templateId) {
+        await templateService.updateTemplate(templateId, payload);
+        setSuccessMessage('Template updated successfully.');
+      } else {
+        await templateService.createTemplate(payload);
+        setSuccessMessage('Template created successfully.');
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save template.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -110,7 +155,7 @@ export default function TemplateEditor() {
             <p className="text-zinc-500 text-sm">Category ID: {categoryId}</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -128,16 +173,22 @@ export default function TemplateEditor() {
           />
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 disabled:opacity-60"
           >
             <Save size={18} />
-            Save Template
+            {isSaving ? 'Saving...' : 'Save Template'}
           </button>
         </div>
       </header>
 
+      {(error || successMessage) && (
+        <div className={`rounded-2xl border p-4 text-sm ${error ? 'bg-red-50 border-red-100 text-red-600' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
+          {error || successMessage}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Editor Canvas */}
         <div className="lg:col-span-3 bg-zinc-100 rounded-3xl border border-zinc-200 overflow-hidden min-h-[600px] relative flex items-center justify-center">
           {!backgroundImageUrl && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 p-8 text-center">
@@ -148,27 +199,22 @@ export default function TemplateEditor() {
               <p className="max-w-xs mt-2">Upload a banner image to start placing your photo frame.</p>
             </div>
           )}
-          
+
           <div className="bg-white shadow-2xl">
             <Stage
               width={800}
               height={500}
               onMouseDown={(e) => {
                 const clickedOnEmpty = e.target === e.target.getStage();
+
                 if (clickedOnEmpty) {
                   setSelected(false);
                 }
               }}
             >
               <Layer>
-                {bgImage && (
-                  <KonvaImage
-                    image={bgImage}
-                    width={800}
-                    height={500}
-                  />
-                )}
-                
+                {bgImage && <KonvaImage image={bgImage} width={800} height={500} />}
+
                 {frame.shape === 'circle' ? (
                   <Circle
                     ref={shapeRef}
@@ -203,7 +249,7 @@ export default function TemplateEditor() {
                     onTransformEnd={handleTransformEnd}
                   />
                 )}
-                
+
                 {selected && (
                   <Transformer
                     ref={trRef}
@@ -211,6 +257,7 @@ export default function TemplateEditor() {
                       if (newBox.width < 5 || newBox.height < 5) {
                         return oldBox;
                       }
+
                       return newBox;
                     }}
                   />
@@ -220,16 +267,58 @@ export default function TemplateEditor() {
           </div>
         </div>
 
-        {/* Sidebar Controls */}
         <div className="space-y-6">
+          <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Template Details</h3>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Template name"
+                className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+              <input
+                type="text"
+                value={thumbnailKey}
+                onChange={(e) => setThumbnailKey(e.target.value)}
+                placeholder="Thumbnail key"
+                className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+              <input
+                type="text"
+                value={templateKey}
+                onChange={(e) => setTemplateKey(e.target.value)}
+                placeholder="Template key"
+                className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+              <input
+                type="text"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                placeholder="Language"
+                className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+              <label className="flex items-center gap-3 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={isPremium}
+                  onChange={(e) => setIsPremium(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Mark as premium
+              </label>
+            </div>
+          </section>
+
           <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
             <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Frame Shape</h3>
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => handleShapeChange('circle')}
                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                  frame.shape === 'circle' 
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+                  frame.shape === 'circle'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
                     : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
                 }`}
               >
@@ -239,8 +328,8 @@ export default function TemplateEditor() {
               <button
                 onClick={() => handleShapeChange('square')}
                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                  frame.shape === 'square' 
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+                  frame.shape === 'square'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
                     : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
                 }`}
               >
@@ -250,8 +339,8 @@ export default function TemplateEditor() {
               <button
                 onClick={() => handleShapeChange('rectangle')}
                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                  frame.shape === 'rectangle' 
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+                  frame.shape === 'rectangle'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
                     : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
                 }`}
               >

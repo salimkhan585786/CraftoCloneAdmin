@@ -2,26 +2,33 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
+import { authService } from '../services/authService';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admin@crafto.com');
+  const [password, setPassword] = useState('Admin@123456');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email === 'admin@test.com' && password === '123456') {
-      localStorage.setItem('isAdmin', 'true');
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await authService.login(email, password);
       navigate('/');
-    } else {
-      setError('Invalid email or password');
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Invalid email or password');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
@@ -51,7 +58,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 pr-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="admin@test.com"
+                  placeholder="admin@crafto.com"
                   required
                 />
               </div>
@@ -66,7 +73,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-12 pr-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="••••••••"
+                  placeholder="Admin@123456"
                   required
                 />
               </div>
@@ -74,14 +81,15 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full bg-zinc-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98]"
+              disabled={isSubmitting}
+              className="w-full bg-zinc-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 active:scale-[0.98] disabled:opacity-60"
             >
-              Sign In
+              {isSubmitting ? 'Signing In...' : 'Sign In'}
               <ArrowRight size={18} />
             </button>
           </form>
         </div>
-        
+
         <p className="text-center text-zinc-400 text-sm mt-8">
           Poster Template System Admin Panel v1.0
         </p>

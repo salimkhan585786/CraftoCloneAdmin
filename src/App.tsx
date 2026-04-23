@@ -6,9 +6,10 @@ import Categories from './pages/Categories';
 import TemplateEditor from './pages/TemplateEditor';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
+import { authService } from './services/authService';
 
 const ProtectedLayout = () => {
-  const isAdmin = localStorage.getItem('isAdmin') === 'true';
+  const isAdmin = authService.isAuthenticated();
 
   if (!isAdmin) {
     return <Navigate to="/login" replace />;
@@ -32,7 +33,7 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-        
+
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/categories" element={<Categories />} />
