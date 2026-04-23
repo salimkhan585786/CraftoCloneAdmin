@@ -21,7 +21,7 @@ export default function Navbar() {
         <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
           <span className="text-white font-bold text-xl">P</span>
         </div>
-        <span className="font-bold text-xl text-zinc-900 tracking-tight">PosterAdmin</span>
+        <span className="font-bold text-xl text-zinc-900 tracking-tight">Crafto Admin</span>
       </div>
 
       <div className="flex items-center gap-4">

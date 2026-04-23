@@ -1,10 +1,13 @@
 import React from 'react';
-import { LayoutDashboard, Layers, Image as ImageIcon } from 'lucide-react';
+import { Crown, Globe2, LayoutDashboard, Layers, Users } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+  { icon: Users, label: 'Users', path: '/users' },
   { icon: Layers, label: 'Categories', path: '/categories' },
+  { icon: Globe2, label: 'Languages', path: '/languages' },
+  { icon: Crown, label: 'Subscriptions', path: '/subscriptions' },
 ];
 
 export default function Sidebar() {

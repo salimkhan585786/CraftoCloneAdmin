@@ -1,12 +1,7 @@
-import { AxiosError } from 'axios';
 import { API } from '../lib/api';
 import { clearAuthStorage, getAccessToken, getStoredAdmin, setAuthSession } from '../lib/authStorage';
-
-interface ApiEnvelope<T> {
-  status: boolean;
-  message: string;
-  data: T;
-}
+import { getErrorMessage } from './apiHelpers';
+import { ApiEnvelope } from '../types';
 
 export interface AdminProfile {
   id: string;
@@ -19,18 +14,6 @@ export interface LoginResponse {
   access_token: string;
   refresh_token: string;
   admin: AdminProfile;
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof AxiosError) {
-    return (error.response?.data as { message?: string } | undefined)?.message || error.message || fallback;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return fallback;
 }
 
 async function login(email: string, password: string) {

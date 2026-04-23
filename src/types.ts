@@ -3,6 +3,12 @@ export interface Category {
   name: string;
 }
 
+export interface ApiEnvelope<T> {
+  status: boolean;
+  message: string;
+  data: T;
+}
+
 export interface AdminCategory extends Category {
   description: string;
   icon_key: string;
@@ -36,7 +42,7 @@ export interface Template {
 
 export interface TemplatePayload {
   name: string;
-  type: 'IMAGE';
+  type: 'IMAGE' | 'VIDEO';
   category_id: string;
   thumbnail_key: string;
   template_key: string;
@@ -48,7 +54,7 @@ export interface TemplatePayload {
 export interface AdminTemplate {
   id: string;
   name: string;
-  type: 'IMAGE';
+  type: 'IMAGE' | 'VIDEO';
   category_id: string;
   thumbnail_key: string;
   template_key: string;
@@ -57,4 +63,94 @@ export interface AdminTemplate {
   language: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface TemplateCategorySummary {
+  id: string;
+  name: string;
+}
+
+export interface AdminTemplateSummary {
+  id: string;
+  name: string;
+  type: 'IMAGE' | 'VIDEO';
+  thumbnail_url: string;
+  usage_count: number;
+  is_premium: boolean;
+  category: TemplateCategorySummary;
+}
+
+export interface AnalyticsDashboard {
+  dau: number;
+  total_users: number;
+  total_templates: number;
+  total_quotes: number;
+  media_generated: number;
+  pending_media_jobs: number;
+  premium_subscribers: number;
+  top_templates: AdminTemplateSummary[];
+}
+
+export interface AdminSubscriptionSummary {
+  plan_type: 'FREE' | 'PREMIUM' | string;
+  expires_at: string | null;
+}
+
+export interface AdminUser {
+  id: string;
+  phone_number: string;
+  name: string | null;
+  status: string;
+  language: string;
+  createdAt: string;
+  subscription: AdminSubscriptionSummary | null;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface Language {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LanguagePayload {
+  code: string;
+  name: string;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  plan_type: 'FREE' | 'PREMIUM' | string;
+  price_inr: string;
+  duration_days: number;
+  description: string;
+  features: string[];
+  is_active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubscriptionPlanPayload {
+  name: string;
+  plan_type: 'FREE' | 'PREMIUM' | string;
+  price_inr: number;
+  duration_days: number;
+  description: string;
+  features: string[];
+}
+
+export interface SubscriptionStatus {
+  plan_type: 'FREE' | 'PREMIUM' | string;
+  is_active: boolean;
+  expires_at: string | null;
 }

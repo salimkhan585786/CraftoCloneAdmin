@@ -4,6 +4,9 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Categories from './pages/Categories';
 import TemplateEditor from './pages/TemplateEditor';
+import Users from './pages/Users';
+import Languages from './pages/Languages';
+import SubscriptionPlans from './pages/SubscriptionPlans';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { authService } from './services/authService';
@@ -36,7 +39,10 @@ export default function App() {
 
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/users" element={<Users />} />
           <Route path="/categories" element={<Categories />} />
+          <Route path="/languages" element={<Languages />} />
+          <Route path="/subscriptions" element={<SubscriptionPlans />} />
           <Route path="/editor" element={<TemplateEditor />} />
         </Route>
 

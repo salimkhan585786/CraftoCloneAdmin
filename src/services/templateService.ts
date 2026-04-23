@@ -1,24 +1,6 @@
-import { AxiosError } from 'axios';
 import { API } from '../lib/api';
-import { AdminTemplate, TemplatePayload } from '../types';
-
-interface ApiEnvelope<T> {
-  status: boolean;
-  message: string;
-  data: T;
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof AxiosError) {
-    return (error.response?.data as { message?: string } | undefined)?.message || error.message || fallback;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return fallback;
-}
+import { AdminTemplate, ApiEnvelope, TemplatePayload } from '../types';
+import { getErrorMessage } from './apiHelpers';
 
 async function createTemplate(payload: TemplatePayload) {
   try {
