@@ -46,7 +46,7 @@ export interface TemplatePayload {
   category_id: string;
   thumbnail_key: string;
   template_key: string;
-  config_json: Record<string, unknown>;
+  config_json: Record<string, unknown> | null;
   is_premium: boolean;
   language: string;
 }
@@ -58,7 +58,12 @@ export interface AdminTemplate {
   category_id: string;
   thumbnail_key: string;
   template_key: string;
-  config_json: Record<string, unknown>;
+  config_json: Record<string, unknown> | null;
+  thumbnail_url?: string | null;
+  template_url?: string | null;
+  is_active?: boolean;
+  usage_count?: number;
+  category?: TemplateCategorySummary;
   is_premium: boolean;
   language: string;
   createdAt?: string;
@@ -74,10 +79,35 @@ export interface AdminTemplateSummary {
   id: string;
   name: string;
   type: 'IMAGE' | 'VIDEO';
-  thumbnail_url: string;
+  thumbnail_url: string | null;
+  template_url?: string | null;
+  category_id?: string;
+  language?: string;
   usage_count: number;
   is_premium: boolean;
   category: TemplateCategorySummary;
+  updatedAt?: string;
+}
+
+export interface TemplateListParams {
+  category_id?: string;
+  language?: string;
+  is_premium?: boolean;
+  type?: 'IMAGE' | 'VIDEO';
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PresignedUploadPayload {
+  fileName: string;
+  category: string;
+  contentType: string;
+}
+
+export interface UploadedAsset {
+  key: string;
+  url: string | null;
 }
 
 export interface AnalyticsDashboard {

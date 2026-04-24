@@ -6,6 +6,7 @@ import { authService } from '../services/authService';
 export default function Navbar() {
   const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  authService.useAuthState();
   const admin = authService.getCurrentAdmin();
 
   const handleLogout = async () => {

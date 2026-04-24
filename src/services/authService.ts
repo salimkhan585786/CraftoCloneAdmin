@@ -1,5 +1,6 @@
-import { API } from '../lib/api';
-import { clearAuthStorage, getAccessToken, getStoredAdmin, setAuthSession } from '../lib/authStorage';
+import { useSyncExternalStore } from 'react';
+import { API, refreshAccessToken } from '../lib/api';
+import { clearAuthStorage, getAccessToken, getStoredAdmin, hasStoredSession, setAuthSession, subscribeToAuthChanges } from '../lib/authStorage';
 import { getErrorMessage } from './apiHelpers';
 import { ApiEnvelope } from '../types';
 
@@ -28,7 +29,13 @@ async function login(email: string, password: string) {
 
 async function logout() {
   try {
-    await API.post('/v1/auth/logout');
+    const accessToken = getAccessToken();
+
+    if (!accessToken && hasStoredSession()) {
+      await refreshAccessToken();
+    }
+
+    await API.post('/v1/auth/logout', {}, { skipAuthRefresh: true, skipRequestRetry: true });
   } catch {
     // Clear local auth even if the remote session has already expired.
   } finally {
@@ -37,11 +44,28 @@ async function logout() {
 }
 
 function isAuthenticated() {
-  return Boolean(getAccessToken());
+  return Boolean(getAccessToken() || hasStoredSession());
 }
 
 function getCurrentAdmin() {
   return getStoredAdmin();
+}
+
+async function restoreSession() {
+  if (getAccessToken()) {
+    return true;
+  }
+
+  if (!hasStoredSession()) {
+    return false;
+  }
+
+  const nextAccessToken = await refreshAccessToken();
+  return Boolean(nextAccessToken);
+}
+
+function useAuthState() {
+  return useSyncExternalStore(subscribeToAuthChanges, isAuthenticated, isAuthenticated);
 }
 
 export const authService = {
@@ -49,4 +73,6 @@ export const authService = {
   logout,
   isAuthenticated,
   getCurrentAdmin,
+  restoreSession,
+  useAuthState,
 };

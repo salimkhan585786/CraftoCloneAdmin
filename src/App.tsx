@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -12,7 +12,34 @@ import Sidebar from './components/Sidebar';
 import { authService } from './services/authService';
 
 const ProtectedLayout = () => {
-  const isAdmin = authService.isAuthenticated();
+  const isAdmin = authService.useAuthState();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function ensureAuthorizedSession() {
+      await authService.restoreSession();
+
+      if (isMounted) {
+        setIsCheckingAuth(false);
+      }
+    }
+
+    ensureAuthorizedSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500">
+        Restoring your session...
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return <Navigate to="/login" replace />;
