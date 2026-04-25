@@ -16,6 +16,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminTemplate, PhotoFrame, TemplatePayload } from '../types';
 import { templateService } from '../services/templateService';
 
+const TEMPLATE_CANVAS_WIDTH = 400;
+const TEMPLATE_CANVAS_HEIGHT = 560;
+
 const emptyFrame: PhotoFrame = {
   shape: 'rectangle',
   x: 100,
@@ -75,6 +78,21 @@ function deriveKeysFromUpload(file: File, assetKey: string) {
     templateAssetKey,
     thumbnailAssetKey,
     defaultTemplateName: resolvedBaseName.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+  };
+}
+
+function getFrameNodePosition(nextFrame: PhotoFrame) {
+  if (nextFrame.shape === 'circle') {
+    const radius = nextFrame.radius ?? Math.min(nextFrame.width, nextFrame.height) / 2;
+    return {
+      x: nextFrame.x + radius,
+      y: nextFrame.y + radius,
+    };
+  }
+
+  return {
+    x: nextFrame.x,
+    y: nextFrame.y,
   };
 }
 
@@ -186,18 +204,23 @@ export default function TemplateEditor() {
 
     const updatedFrame = {
       ...frame,
-      x: node.x(),
-      y: node.y(),
       width: Math.max(5, node.width() * scaleX),
       height: Math.max(5, node.height() * scaleY),
     };
 
     if (frame.shape === 'circle') {
       updatedFrame.radius = updatedFrame.width / 2;
+      updatedFrame.x = node.x() - updatedFrame.width / 2;
+      updatedFrame.y = node.y() - updatedFrame.height / 2;
     } else if (frame.shape === 'square') {
       const size = Math.max(updatedFrame.width, updatedFrame.height);
       updatedFrame.width = size;
       updatedFrame.height = size;
+      updatedFrame.x = node.x();
+      updatedFrame.y = node.y();
+    } else {
+      updatedFrame.x = node.x();
+      updatedFrame.y = node.y();
     }
 
     setFrame(updatedFrame);
@@ -248,11 +271,7 @@ export default function TemplateEditor() {
       nextConfig.background_preview = mediaPreviewUrl;
     }
 
-    if (templateType === 'IMAGE') {
-      nextConfig.photo_frame = frame;
-    } else {
-      delete nextConfig.photo_frame;
-    }
+    nextConfig.photo_frame = frame;
 
     return {
       name: templateName,
@@ -351,7 +370,7 @@ export default function TemplateEditor() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <div className="lg:col-span-3 bg-zinc-100 rounded-3xl border border-zinc-200 overflow-hidden min-h-[600px] relative flex items-center justify-center">
+          <div className="lg:col-span-3 bg-zinc-100 rounded-3xl border border-zinc-200 overflow-hidden min-h-[600px] relative flex items-start justify-center">
             {!mediaPreviewUrl && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 p-8 text-center">
                 <div className="w-20 h-20 bg-zinc-200 rounded-full flex items-center justify-center mb-4">
@@ -362,19 +381,34 @@ export default function TemplateEditor() {
               </div>
             )}
 
-            {templateType === 'VIDEO' ? (
-              mediaPreviewUrl ? (
-                <div className="w-full h-full p-6 flex items-center justify-center">
-                  <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] border border-zinc-200 bg-black shadow-2xl">
-                    <video src={mediaPreviewUrl} controls className="w-full h-full max-h-[540px] object-contain" />
-                  </div>
-                </div>
-              ) : null
-            ) : (
-              <div className="bg-white shadow-2xl">
+            <div className="bg-white shadow-2xl">
+              <div className="relative" style={{ width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT }}>
+                {templateType === 'VIDEO' ? (
+                  mediaPreviewUrl ? (
+                    <video
+                      src={mediaPreviewUrl}
+                      controls
+                      className="absolute inset-0 h-full w-full bg-black object-contain"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black text-sm font-medium text-white/70">
+                      Video Preview
+                    </div>
+                  )
+                ) : (
+                  bgImage && (
+                    <img
+                      src={mediaPreviewUrl || ''}
+                      alt="Template preview"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  )
+                )}
+
                 <Stage
-                  width={800}
-                  height={500}
+                  width={TEMPLATE_CANVAS_WIDTH}
+                  height={TEMPLATE_CANVAS_HEIGHT}
+                  className="absolute inset-0"
                   onMouseDown={(e) => {
                     const clickedOnEmpty = e.target === e.target.getStage();
 
@@ -384,13 +418,11 @@ export default function TemplateEditor() {
                   }}
                 >
                   <Layer>
-                    {bgImage && <KonvaImage image={bgImage} width={800} height={500} />}
-
                     {frame.shape === 'circle' ? (
                       <Circle
                         ref={shapeRef}
-                        x={frame.x}
-                        y={frame.y}
+                        x={getFrameNodePosition(frame).x}
+                        y={getFrameNodePosition(frame).y}
                         radius={frame.radius || 50}
                         fill="rgba(79, 70, 229, 0.2)"
                         stroke="#4f46e5"
@@ -398,7 +430,12 @@ export default function TemplateEditor() {
                         draggable
                         onClick={() => setSelected(true)}
                         onDragEnd={(e) => {
-                          setFrame({ ...frame, x: e.target.x(), y: e.target.y() });
+                          const radius = frame.radius || Math.min(frame.width, frame.height) / 2;
+                          setFrame({
+                            ...frame,
+                            x: e.target.x() - radius,
+                            y: e.target.y() - radius,
+                          });
                         }}
                         onTransformEnd={handleTransformEnd}
                       />
@@ -436,7 +473,7 @@ export default function TemplateEditor() {
                   </Layer>
                 </Stage>
               </div>
-            )}
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -512,83 +549,74 @@ export default function TemplateEditor() {
               </div>
             </section>
 
-            {templateType === 'IMAGE' ? (
-              <>
-                <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-                  <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Frame Shape</h3>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      onClick={() => handleShapeChange('circle')}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                        frame.shape === 'circle'
-                          ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                          : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
-                      }`}
-                    >
-                      <CircleIcon size={20} />
-                      <span className="text-xs font-semibold">Circle</span>
-                    </button>
-                    <button
-                      onClick={() => handleShapeChange('square')}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                        frame.shape === 'square'
-                          ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                          : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
-                      }`}
-                    >
-                      <Square size={20} />
-                      <span className="text-xs font-semibold">Square</span>
-                    </button>
-                    <button
-                      onClick={() => handleShapeChange('rectangle')}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                        frame.shape === 'rectangle'
-                          ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                          : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
-                      }`}
-                    >
-                      <RectangleHorizontal size={20} />
-                      <span className="text-xs font-semibold">Rect</span>
-                    </button>
-                  </div>
-                </section>
-
-                <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-                  <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Live Coordinates</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <span className="text-xs font-bold text-zinc-500">X Position</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.x)}px</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <span className="text-xs font-bold text-zinc-500">Y Position</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.y)}px</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <span className="text-xs font-bold text-zinc-500">Width</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.width)}px</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <span className="text-xs font-bold text-zinc-500">Height</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.height)}px</span>
-                    </div>
-                    {frame.shape === 'circle' && (
-                      <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                        <span className="text-xs font-bold text-zinc-500">Radius</span>
-                        <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.radius || 0)}px</span>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </>
-            ) : (
+            <>
               <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3">Video Template</h3>
-                <p className="text-sm text-zinc-500">
-                  Video banner uploads are now supported. Frame controls stay hidden here because the current editor only positions photo frames on image templates.
-                </p>
+                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Frame Shape</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => handleShapeChange('circle')}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                      frame.shape === 'circle'
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                        : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <CircleIcon size={20} />
+                    <span className="text-xs font-semibold">Circle</span>
+                  </button>
+                  <button
+                    onClick={() => handleShapeChange('square')}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                      frame.shape === 'square'
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                        : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <Square size={20} />
+                    <span className="text-xs font-semibold">Square</span>
+                  </button>
+                  <button
+                    onClick={() => handleShapeChange('rectangle')}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                      frame.shape === 'rectangle'
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                        : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <RectangleHorizontal size={20} />
+                    <span className="text-xs font-semibold">Rect</span>
+                  </button>
+                </div>
               </section>
-            )}
+
+              <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Live Coordinates</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                    <span className="text-xs font-bold text-zinc-500">X Position</span>
+                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.x)}px</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                    <span className="text-xs font-bold text-zinc-500">Y Position</span>
+                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.y)}px</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                    <span className="text-xs font-bold text-zinc-500">Width</span>
+                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.width)}px</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                    <span className="text-xs font-bold text-zinc-500">Height</span>
+                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.height)}px</span>
+                  </div>
+                  {frame.shape === 'circle' && (
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Radius</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.radius || 0)}px</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
 
             <section className="bg-zinc-900 p-6 rounded-3xl text-white shadow-xl shadow-zinc-200">
               <div className="flex items-center gap-3 mb-4">
