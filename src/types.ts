@@ -33,6 +33,14 @@ export interface PhotoFrame {
   radius?: number;
 }
 
+export interface BackgroundCrop {
+  x: number;
+  y: number;
+  scale: number;
+  mediaWidth: number;
+  mediaHeight: number;
+}
+
 export interface Template {
   id: string;
   categoryId: string;

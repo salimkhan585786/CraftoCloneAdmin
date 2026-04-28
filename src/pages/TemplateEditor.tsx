@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import {
@@ -13,11 +13,15 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { AdminTemplate, PhotoFrame, TemplatePayload } from '../types';
+import { AdminTemplate, BackgroundCrop, PhotoFrame, TemplatePayload } from '../types';
 import { templateService } from '../services/templateService';
 
 const TEMPLATE_CANVAS_WIDTH = 400;
 const TEMPLATE_CANVAS_HEIGHT = 560;
+const MIN_BANNER_SCALE = 1;
+const MAX_BANNER_SCALE = 4;
+
+type EditorMode = 'crop' | 'frame';
 
 const emptyFrame: PhotoFrame = {
   shape: 'rectangle',
@@ -40,6 +44,21 @@ function isPhotoFrame(value: unknown): value is PhotoFrame {
     typeof candidate.y === 'number' &&
     typeof candidate.width === 'number' &&
     typeof candidate.height === 'number'
+  );
+}
+
+function isBackgroundCrop(value: unknown): value is BackgroundCrop {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<BackgroundCrop>;
+  return (
+    typeof candidate.x === 'number' &&
+    typeof candidate.y === 'number' &&
+    typeof candidate.scale === 'number' &&
+    typeof candidate.mediaWidth === 'number' &&
+    typeof candidate.mediaHeight === 'number'
   );
 }
 
@@ -96,6 +115,74 @@ function getFrameNodePosition(nextFrame: PhotoFrame) {
   };
 }
 
+function createDefaultBackgroundCrop(mediaWidth: number, mediaHeight: number): BackgroundCrop {
+  const baseScale = Math.max(TEMPLATE_CANVAS_WIDTH / mediaWidth, TEMPLATE_CANVAS_HEIGHT / mediaHeight);
+
+  return {
+    x: (TEMPLATE_CANVAS_WIDTH - mediaWidth * baseScale) / 2,
+    y: (TEMPLATE_CANVAS_HEIGHT - mediaHeight * baseScale) / 2,
+    scale: 1,
+    mediaWidth,
+    mediaHeight,
+  };
+}
+
+function clampBackgroundCrop(crop: BackgroundCrop, mediaWidth: number, mediaHeight: number): BackgroundCrop {
+  const safeScale = Math.min(MAX_BANNER_SCALE, Math.max(MIN_BANNER_SCALE, crop.scale || 1));
+  const baseScale = Math.max(TEMPLATE_CANVAS_WIDTH / mediaWidth, TEMPLATE_CANVAS_HEIGHT / mediaHeight);
+  const renderWidth = mediaWidth * baseScale * safeScale;
+  const renderHeight = mediaHeight * baseScale * safeScale;
+  const minX = Math.min(0, TEMPLATE_CANVAS_WIDTH - renderWidth);
+  const minY = Math.min(0, TEMPLATE_CANVAS_HEIGHT - renderHeight);
+
+  return {
+    x: renderWidth <= TEMPLATE_CANVAS_WIDTH ? (TEMPLATE_CANVAS_WIDTH - renderWidth) / 2 : Math.min(0, Math.max(minX, crop.x)),
+    y: renderHeight <= TEMPLATE_CANVAS_HEIGHT ? (TEMPLATE_CANVAS_HEIGHT - renderHeight) / 2 : Math.min(0, Math.max(minY, crop.y)),
+    scale: safeScale,
+    mediaWidth,
+    mediaHeight,
+  };
+}
+
+function getBackgroundCropMetrics(crop: BackgroundCrop | null) {
+  if (!crop || crop.mediaWidth <= 0 || crop.mediaHeight <= 0) {
+    return null;
+  }
+
+  const baseScale = Math.max(TEMPLATE_CANVAS_WIDTH / crop.mediaWidth, TEMPLATE_CANVAS_HEIGHT / crop.mediaHeight);
+  const renderScale = baseScale * crop.scale;
+
+  return {
+    renderScale,
+    renderWidth: crop.mediaWidth * renderScale,
+    renderHeight: crop.mediaHeight * renderScale,
+    sourceX: Math.max(0, (-crop.x) / renderScale),
+    sourceY: Math.max(0, (-crop.y) / renderScale),
+    sourceWidth: Math.min(crop.mediaWidth, TEMPLATE_CANVAS_WIDTH / renderScale),
+    sourceHeight: Math.min(crop.mediaHeight, TEMPLATE_CANVAS_HEIGHT / renderScale),
+  };
+}
+
+function slugifyFileName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'template-banner';
+}
+
+async function canvasToFile(canvas: HTMLCanvasElement, fileName: string, mimeType: string) {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((nextBlob) => resolve(nextBlob), mimeType, 0.92);
+  });
+
+  if (!blob) {
+    throw new Error('Unable to prepare cropped banner image.');
+  }
+
+  return new File([blob], fileName, { type: mimeType });
+}
+
 export default function TemplateEditor() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -116,10 +203,11 @@ export default function TemplateEditor() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(Boolean(templateId));
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
-
   const [frame, setFrame] = useState<PhotoFrame>(emptyFrame);
+  const [bannerCrop, setBannerCrop] = useState<BackgroundCrop | null>(null);
   const [selected, setSelected] = useState(false);
-  const [bgImage] = useImage(templateType === 'IMAGE' ? mediaPreviewUrl || '' : '');
+  const [editorMode, setEditorMode] = useState<EditorMode>('crop');
+  const [bgImage] = useImage(templateType === 'IMAGE' ? mediaPreviewUrl || '' : '', 'anonymous');
 
   const shapeRef = useRef<any>(null);
   const trRef = useRef<any>(null);
@@ -131,6 +219,33 @@ export default function TemplateEditor() {
       trRef.current.getLayer().batchDraw();
     }
   }, [selected]);
+
+  useEffect(() => {
+    if (templateType !== 'IMAGE') {
+      setBannerCrop(null);
+      return;
+    }
+
+    if (!bgImage?.width || !bgImage?.height) {
+      return;
+    }
+
+    setBannerCrop((currentCrop) => {
+      if (currentCrop) {
+        return clampBackgroundCrop(
+          {
+            ...currentCrop,
+            mediaWidth: bgImage.width,
+            mediaHeight: bgImage.height,
+          },
+          bgImage.width,
+          bgImage.height,
+        );
+      }
+
+      return createDefaultBackgroundCrop(bgImage.width, bgImage.height);
+    });
+  }, [bgImage, templateType]);
 
   useEffect(() => {
     if (!templateId) {
@@ -164,9 +279,13 @@ export default function TemplateEditor() {
     setIsPremium(Boolean(template.is_premium));
     setExistingConfigJson(template.config_json ?? null);
     setSelected(false);
+    setEditorMode(template.type === 'IMAGE' ? 'crop' : 'frame');
 
     const maybeFrame = template.config_json ? (template.config_json as Record<string, unknown>).photo_frame : null;
+    const maybeBackgroundCrop = template.config_json ? (template.config_json as Record<string, unknown>).background_crop : null;
+
     setFrame(isPhotoFrame(maybeFrame) ? maybeFrame : emptyFrame);
+    setBannerCrop(isBackgroundCrop(maybeBackgroundCrop) ? maybeBackgroundCrop : null);
   };
 
   const handleShapeChange = (shape: 'circle' | 'square' | 'rectangle') => {
@@ -226,6 +345,38 @@ export default function TemplateEditor() {
     setFrame(updatedFrame);
   };
 
+  const updateBackgroundScale = (nextScale: number) => {
+    setBannerCrop((currentCrop) => {
+      if (!currentCrop) {
+        return currentCrop;
+      }
+
+      const currentMetrics = getBackgroundCropMetrics(currentCrop);
+
+      if (!currentMetrics) {
+        return currentCrop;
+      }
+
+      const safeScale = Math.min(MAX_BANNER_SCALE, Math.max(MIN_BANNER_SCALE, nextScale));
+      const scaleRatio = safeScale / currentCrop.scale;
+      const nextRenderWidth = currentMetrics.renderWidth * scaleRatio;
+      const nextRenderHeight = currentMetrics.renderHeight * scaleRatio;
+      const relativeCenterX = (TEMPLATE_CANVAS_WIDTH / 2 - currentCrop.x) / currentMetrics.renderWidth;
+      const relativeCenterY = (TEMPLATE_CANVAS_HEIGHT / 2 - currentCrop.y) / currentMetrics.renderHeight;
+
+      return clampBackgroundCrop(
+        {
+          ...currentCrop,
+          scale: safeScale,
+          x: TEMPLATE_CANVAS_WIDTH / 2 - relativeCenterX * nextRenderWidth,
+          y: TEMPLATE_CANVAS_HEIGHT / 2 - relativeCenterY * nextRenderHeight,
+        },
+        currentCrop.mediaWidth,
+        currentCrop.mediaHeight,
+      );
+    });
+  };
+
   const handleAssetUpload = async (file: File) => {
     setError('');
     setSuccessMessage('');
@@ -241,6 +392,9 @@ export default function TemplateEditor() {
       setTemplateKey(derivedKeys.templateAssetKey);
       setThumbnailKey(derivedKeys.thumbnailAssetKey);
       setMediaPreviewUrl(previewUrl);
+      setSelected(false);
+      setEditorMode(nextType === 'IMAGE' ? 'crop' : 'frame');
+      setBannerCrop(null);
 
       if (!templateName.trim()) {
         setTemplateName(derivedKeys.defaultTemplateName);
@@ -264,24 +418,80 @@ export default function TemplateEditor() {
     e.target.value = '';
   };
 
-  const buildPayload = (): TemplatePayload => {
+  const buildPayload = (
+    nextTemplateKey = templateKey,
+    nextThumbnailKey = thumbnailKey,
+    nextBackgroundPreview = mediaPreviewUrl,
+  ): TemplatePayload => {
     const nextConfig = { ...(existingConfigJson ?? {}) };
 
-    if (mediaPreviewUrl) {
-      nextConfig.background_preview = mediaPreviewUrl;
+    if (nextBackgroundPreview) {
+      nextConfig.background_preview = nextBackgroundPreview;
     }
 
     nextConfig.photo_frame = frame;
+    delete nextConfig.background_crop;
 
     return {
       name: templateName,
       type: templateType,
       category_id: activeCategoryId,
-      thumbnail_key: thumbnailKey,
-      template_key: templateKey,
+      thumbnail_key: nextThumbnailKey,
+      template_key: nextTemplateKey,
       config_json: Object.keys(nextConfig).length ? nextConfig : null,
       is_premium: isPremium,
       language,
+    };
+  };
+
+  const exportCroppedBanner = async () => {
+    if (templateType !== 'IMAGE') {
+      return null;
+    }
+
+    if (!bgImage || !bannerCrop) {
+      throw new Error('Upload an image and adjust the reel crop before saving.');
+    }
+
+    const cropMetrics = getBackgroundCropMetrics(bannerCrop);
+
+    if (!cropMetrics) {
+      throw new Error('Unable to calculate the cropped banner area.');
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = TEMPLATE_CANVAS_WIDTH;
+    canvas.height = TEMPLATE_CANVAS_HEIGHT;
+
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Unable to prepare cropped banner canvas.');
+    }
+
+    context.drawImage(
+      bgImage,
+      cropMetrics.sourceX,
+      cropMetrics.sourceY,
+      cropMetrics.sourceWidth,
+      cropMetrics.sourceHeight,
+      0,
+      0,
+      TEMPLATE_CANVAS_WIDTH,
+      TEMPLATE_CANVAS_HEIGHT,
+    );
+
+    const croppedFile = await canvasToFile(
+      canvas,
+      `${slugifyFileName(templateName || templateKey || 'template-banner')}-reel.jpg`,
+      'image/jpeg',
+    );
+
+    const uploadedAsset = await templateService.uploadAsset(croppedFile);
+    return {
+      previewUrl: getDisplayUrl(uploadedAsset.url, croppedFile),
+      uploadedAsset,
+      croppedFile,
     };
   };
 
@@ -296,13 +506,35 @@ export default function TemplateEditor() {
       return;
     }
 
-    const payload = buildPayload();
-
     setError('');
     setSuccessMessage('');
     setIsSaving(true);
 
     try {
+      let nextTemplateKey = templateKey;
+      let nextThumbnailKey = thumbnailKey;
+      let nextPreviewUrl = mediaPreviewUrl;
+
+      if (templateType === 'IMAGE') {
+        const croppedBanner = await exportCroppedBanner();
+
+        if (!croppedBanner) {
+          throw new Error('Unable to prepare the cropped banner image.');
+        }
+
+        const derivedKeys = deriveKeysFromUpload(croppedBanner.croppedFile, croppedBanner.uploadedAsset.key);
+        nextTemplateKey = derivedKeys.templateAssetKey;
+        nextThumbnailKey = derivedKeys.thumbnailAssetKey;
+        nextPreviewUrl = croppedBanner.previewUrl;
+
+        setTemplateKey(nextTemplateKey);
+        setThumbnailKey(nextThumbnailKey);
+        setMediaPreviewUrl(nextPreviewUrl);
+        setBannerCrop(createDefaultBackgroundCrop(TEMPLATE_CANVAS_WIDTH, TEMPLATE_CANVAS_HEIGHT));
+      }
+
+      const payload = buildPayload(nextTemplateKey, nextThumbnailKey, nextPreviewUrl);
+
       if (templateId) {
         await templateService.updateTemplate(templateId, payload);
         navigate(-1);
@@ -316,6 +548,8 @@ export default function TemplateEditor() {
       setIsSaving(false);
     }
   };
+
+  const cropMetrics = getBackgroundCropMetrics(bannerCrop);
 
   return (
     <div className="space-y-6">
@@ -382,7 +616,7 @@ export default function TemplateEditor() {
             )}
 
             <div className="bg-white shadow-2xl">
-              <div className="relative" style={{ width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT }}>
+              <div className="relative overflow-hidden" style={{ width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT }}>
                 {templateType === 'VIDEO' ? (
                   mediaPreviewUrl ? (
                     <video
@@ -395,15 +629,7 @@ export default function TemplateEditor() {
                       Video Preview
                     </div>
                   )
-                ) : (
-                  bgImage && (
-                    <img
-                      src={mediaPreviewUrl || ''}
-                      alt="Template preview"
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  )
-                )}
+                ) : null}
 
                 <Stage
                   width={TEMPLATE_CANVAS_WIDTH}
@@ -412,12 +638,52 @@ export default function TemplateEditor() {
                   onMouseDown={(e) => {
                     const clickedOnEmpty = e.target === e.target.getStage();
 
-                    if (clickedOnEmpty) {
+                    if (clickedOnEmpty && editorMode === 'frame') {
                       setSelected(false);
                     }
                   }}
+                  onWheel={(e) => {
+                    if (editorMode !== 'crop' || templateType !== 'IMAGE' || !bannerCrop) {
+                      return;
+                    }
+
+                    e.evt.preventDefault();
+                    updateBackgroundScale(bannerCrop.scale + (e.evt.deltaY < 0 ? 0.08 : -0.08));
+                  }}
                 >
                   <Layer>
+                    {templateType === 'IMAGE' && bgImage && bannerCrop && cropMetrics && (
+                      <KonvaImage
+                        image={bgImage}
+                        x={bannerCrop.x}
+                        y={bannerCrop.y}
+                        width={cropMetrics.renderWidth}
+                        height={cropMetrics.renderHeight}
+                        draggable={editorMode === 'crop'}
+                        onClick={() => {
+                          setEditorMode('crop');
+                          setSelected(false);
+                        }}
+                        onTap={() => {
+                          setEditorMode('crop');
+                          setSelected(false);
+                        }}
+                        onDragEnd={(e) => {
+                          setBannerCrop(
+                            clampBackgroundCrop(
+                              {
+                                ...bannerCrop,
+                                x: e.target.x(),
+                                y: e.target.y(),
+                              },
+                              bannerCrop.mediaWidth,
+                              bannerCrop.mediaHeight,
+                            ),
+                          );
+                        }}
+                      />
+                    )}
+
                     {frame.shape === 'circle' ? (
                       <Circle
                         ref={shapeRef}
@@ -427,8 +693,11 @@ export default function TemplateEditor() {
                         fill="rgba(79, 70, 229, 0.2)"
                         stroke="#4f46e5"
                         strokeWidth={2}
-                        draggable
-                        onClick={() => setSelected(true)}
+                        draggable={editorMode === 'frame'}
+                        onClick={() => {
+                          setEditorMode('frame');
+                          setSelected(true);
+                        }}
                         onDragEnd={(e) => {
                           const radius = frame.radius || Math.min(frame.width, frame.height) / 2;
                           setFrame({
@@ -449,8 +718,11 @@ export default function TemplateEditor() {
                         fill="rgba(79, 70, 229, 0.2)"
                         stroke="#4f46e5"
                         strokeWidth={2}
-                        draggable
-                        onClick={() => setSelected(true)}
+                        draggable={editorMode === 'frame'}
+                        onClick={() => {
+                          setEditorMode('frame');
+                          setSelected(true);
+                        }}
                         onDragEnd={(e) => {
                           setFrame({ ...frame, x: e.target.x(), y: e.target.y() });
                         }}
@@ -458,7 +730,7 @@ export default function TemplateEditor() {
                       />
                     )}
 
-                    {selected && (
+                    {selected && editorMode === 'frame' && (
                       <Transformer
                         ref={trRef}
                         boundBoxFunc={(oldBox, newBox) => {
@@ -549,74 +821,169 @@ export default function TemplateEditor() {
               </div>
             </section>
 
-            <>
-              <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Frame Shape</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => handleShapeChange('circle')}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                      frame.shape === 'circle'
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                        : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <CircleIcon size={20} />
-                    <span className="text-xs font-semibold">Circle</span>
-                  </button>
-                  <button
-                    onClick={() => handleShapeChange('square')}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                      frame.shape === 'square'
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                        : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <Square size={20} />
-                    <span className="text-xs font-semibold">Square</span>
-                  </button>
-                  <button
-                    onClick={() => handleShapeChange('rectangle')}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                      frame.shape === 'rectangle'
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                        : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
-                    }`}
-                  >
-                    <RectangleHorizontal size={20} />
-                    <span className="text-xs font-semibold">Rect</span>
-                  </button>
-                </div>
-              </section>
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Editor Mode</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setEditorMode('crop');
+                    setSelected(false);
+                  }}
+                  disabled={templateType !== 'IMAGE' || !bgImage}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                    editorMode === 'crop'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
+                  } disabled:opacity-50`}
+                >
+                  Crop Banner
+                </button>
+                <button
+                  onClick={() => setEditorMode('frame')}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                    editorMode === 'frame'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
+                  }`}
+                >
+                  Place Photo
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                Crop mode matches the mobile poster viewport. Drag the image and use mouse wheel or the zoom slider to choose the exact visible area.
+              </p>
+            </section>
 
-              <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Live Coordinates</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                    <span className="text-xs font-bold text-zinc-500">X Position</span>
-                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.x)}px</span>
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Banner Crop</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
+                    <span>Zoom</span>
+                    <span>{bannerCrop ? `${bannerCrop.scale.toFixed(2)}x` : '1.00x'}</span>
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                    <span className="text-xs font-bold text-zinc-500">Y Position</span>
-                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.y)}px</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                    <span className="text-xs font-bold text-zinc-500">Width</span>
-                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.width)}px</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                    <span className="text-xs font-bold text-zinc-500">Height</span>
-                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.height)}px</span>
-                  </div>
-                  {frame.shape === 'circle' && (
-                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <span className="text-xs font-bold text-zinc-500">Radius</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.radius || 0)}px</span>
-                    </div>
-                  )}
+                  <input
+                    type="range"
+                    min={MIN_BANNER_SCALE}
+                    max={MAX_BANNER_SCALE}
+                    step={0.01}
+                    value={bannerCrop?.scale ?? 1}
+                    onChange={(e) => updateBackgroundScale(Number(e.target.value))}
+                    disabled={templateType !== 'IMAGE' || !bannerCrop}
+                    className="w-full"
+                  />
                 </div>
-              </section>
-            </>
+                <button
+                  onClick={() => {
+                    if (bgImage?.width && bgImage?.height) {
+                      setBannerCrop(createDefaultBackgroundCrop(bgImage.width, bgImage.height));
+                    }
+                  }}
+                  disabled={templateType !== 'IMAGE' || !bgImage}
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  Reset Crop
+                </button>
+                <p className="text-xs text-zinc-500">
+                  This saved crop is sent with the template so the React Native app can render the same banner position before placing the user photo.
+                </p>
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Frame Shape</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => handleShapeChange('circle')}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                    frame.shape === 'circle'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
+                  }`}
+                >
+                  <CircleIcon size={20} />
+                  <span className="text-xs font-semibold">Circle</span>
+                </button>
+                <button
+                  onClick={() => handleShapeChange('square')}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                    frame.shape === 'square'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
+                  }`}
+                >
+                  <Square size={20} />
+                  <span className="text-xs font-semibold">Square</span>
+                </button>
+                <button
+                  onClick={() => handleShapeChange('rectangle')}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                    frame.shape === 'rectangle'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-400 hover:bg-zinc-100'
+                  }`}
+                >
+                  <RectangleHorizontal size={20} />
+                  <span className="text-xs font-semibold">Rect</span>
+                </button>
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Live Coordinates</h3>
+              <div className="space-y-3">
+                {bannerCrop && cropMetrics && (
+                  <>
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Banner X</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(bannerCrop.x)}px</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Banner Y</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(bannerCrop.y)}px</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Crop Source X</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceX)}px</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Crop Source Y</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceY)}px</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Crop Width</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceWidth)}px</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                      <span className="text-xs font-bold text-zinc-500">Crop Height</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceHeight)}px</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Frame X</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.x)}px</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Frame Y</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.y)}px</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Frame Width</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.width)}px</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Frame Height</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.height)}px</span>
+                </div>
+                {frame.shape === 'circle' && (
+                  <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                    <span className="text-xs font-bold text-zinc-500">Radius</span>
+                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.radius || 0)}px</span>
+                  </div>
+                )}
+              </div>
+            </section>
 
             <section className="bg-zinc-900 p-6 rounded-3xl text-white shadow-xl shadow-zinc-200">
               <div className="flex items-center gap-3 mb-4">
@@ -627,7 +994,7 @@ export default function TemplateEditor() {
               </div>
               <ul className="text-xs text-zinc-400 space-y-2 list-disc pl-4">
                 <li>Upload banner media first so the preview and asset key are filled automatically.</li>
-                <li>Use image mode when you need to place a draggable photo frame on the banner.</li>
+                <li>Crop the banner first, then switch to photo mode to place the user image frame.</li>
                 <li>Open templates from Categories to load and edit an existing template quickly.</li>
               </ul>
             </section>
