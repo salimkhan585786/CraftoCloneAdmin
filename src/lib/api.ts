@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 import Config from '../config';
-import { clearAuthStorage, getAccessToken, getRefreshToken, getStoredAdmin, setAuthSession } from './authStorage';
+import { expireAuthSession, getAccessToken, getRefreshToken, getStoredAdmin, setAuthSession } from './authStorage';
 
 interface RefreshResponse {
   status: boolean;
@@ -77,7 +77,7 @@ export async function refreshAccessToken() {
   const existingAdmin = getStoredAdmin();
 
   if (!refreshToken || !existingAdmin) {
-    clearAuthStorage();
+    expireAuthSession();
     return null;
   }
 
@@ -95,7 +95,7 @@ export async function refreshAccessToken() {
         return data.data.access_token;
       })
       .catch(() => {
-        clearAuthStorage();
+        expireAuthSession();
         return null;
       })
       .finally(() => {

@@ -51,6 +51,14 @@ export function clearAuthStorage() {
   window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
+export function expireAuthSession() {
+  clearAuthStorage();
+
+  if (window.location.pathname !== '/login') {
+    window.location.replace('/login');
+  }
+}
+
 export function subscribeToAuthChanges(callback: () => void) {
   window.addEventListener(AUTH_CHANGE_EVENT, callback);
   return () => window.removeEventListener(AUTH_CHANGE_EVENT, callback);

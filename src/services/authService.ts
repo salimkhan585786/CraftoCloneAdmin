@@ -32,7 +32,11 @@ async function logout() {
     const accessToken = getAccessToken();
 
     if (!accessToken && hasStoredSession()) {
-      await refreshAccessToken();
+      const nextAccessToken = await refreshAccessToken();
+
+      if (!nextAccessToken) {
+        return;
+      }
     }
 
     await API.post('/v1/auth/logout', {}, { skipAuthRefresh: true, skipRequestRetry: true });
