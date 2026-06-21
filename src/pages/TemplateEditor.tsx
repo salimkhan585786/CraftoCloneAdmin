@@ -9,6 +9,8 @@ import {
   Square,
   RectangleHorizontal,
   ChevronLeft,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminTemplate, BackgroundCrop, PhotoFrame, TemplatePayload } from '../types';
@@ -293,8 +295,10 @@ export default function TemplateEditor() {
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [frame, setFrame] = useState<PhotoFrame>(emptyFrame);
   const [bannerCrop, setBannerCrop] = useState<BackgroundCrop | null>(null);
+  const [shouldExportBannerCrop, setShouldExportBannerCrop] = useState(!templateId);
   const [selected, setSelected] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>('crop');
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const imagePreviewUrl = templateType === 'IMAGE' ? mediaPreviewUrl || '' : '';
   const [corsBgImage, corsImageStatus] = useImage(imagePreviewUrl, 'anonymous');
   const [plainBgImage] = useImage(corsImageStatus === 'failed' ? imagePreviewUrl : '');
@@ -306,6 +310,7 @@ export default function TemplateEditor() {
   const shapeRef = useRef<any>(null);
   const trRef = useRef<any>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (selected && trRef.current && shapeRef.current) {
@@ -362,6 +367,10 @@ export default function TemplateEditor() {
     loadTemplate();
   }, [templateId]);
 
+  useEffect(() => {
+    setIsVideoPlaying(false);
+  }, [mediaPreviewUrl, templateType]);
+
   const hydrateTemplate = (template: AdminTemplate) => {
     setActiveCategoryId(template.category_id || initialCategoryId || '');
     setTemplateName(template.name || '');
@@ -380,6 +389,7 @@ export default function TemplateEditor() {
 
     setFrame(isPhotoFrame(maybeFrame) ? maybeFrame : emptyFrame);
     setBannerCrop(isBackgroundCrop(maybeBackgroundCrop) ? maybeBackgroundCrop : null);
+    setShouldExportBannerCrop(false);
   };
 
   const handleShapeChange = (shape: 'circle' | 'square' | 'rectangle') => {
@@ -474,6 +484,7 @@ export default function TemplateEditor() {
   };
 
   const updateBackgroundScale = (nextScale: number) => {
+    setShouldExportBannerCrop(true);
     setBannerCrop((currentCrop) => {
       if (!currentCrop) {
         return currentCrop;
@@ -536,6 +547,7 @@ export default function TemplateEditor() {
       setSelected(false);
       setEditorMode(nextType === 'IMAGE' ? 'crop' : 'frame');
       setBannerCrop(null);
+      setShouldExportBannerCrop(nextType === 'IMAGE');
 
       if (!templateName.trim()) {
         setTemplateName(derivedKeys.defaultTemplateName);
@@ -557,6 +569,24 @@ export default function TemplateEditor() {
     }
 
     e.target.value = '';
+  };
+
+  const toggleVideoPlayback = async () => {
+    const video = videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    try {
+      if (video.paused) {
+        await video.play();
+      } else {
+        video.pause();
+      }
+    } catch {
+      setError('Unable to play this video preview. Check that the template URL is accessible in the browser.');
+    }
   };
 
   const buildPayload = (
@@ -659,7 +689,7 @@ export default function TemplateEditor() {
       let nextThumbnailKey = thumbnailKey;
       let nextPreviewUrl = mediaPreviewUrl;
 
-      if (templateType === 'IMAGE') {
+      if (templateType === 'IMAGE' && shouldExportBannerCrop) {
         const croppedBanner = await exportCroppedBanner();
 
         if (!croppedBanner) {
@@ -675,6 +705,7 @@ export default function TemplateEditor() {
         setThumbnailKey(nextThumbnailKey);
         setMediaPreviewUrl(nextPreviewUrl);
         setBannerCrop(createDefaultBackgroundCrop(TEMPLATE_CANVAS_WIDTH, TEMPLATE_CANVAS_HEIGHT));
+        setShouldExportBannerCrop(false);
       }
 
       const payload = buildPayload(nextTemplateKey, nextThumbnailKey, nextPreviewUrl);
@@ -695,6 +726,13 @@ export default function TemplateEditor() {
 
   const cropMetrics = getBackgroundCropMetrics(bannerCrop);
   const canRenderBackgroundInStage = Boolean(templateType === 'IMAGE' && bgImage && bannerCrop && cropMetrics);
+  const videoFrameOverlayStyle: React.CSSProperties = {
+    left: frame.x,
+    top: frame.y,
+    width: frame.width,
+    height: frame.height,
+    borderRadius: frame.shape === 'circle' ? '9999px' : 0,
+  };
 
   return (
     <div className="space-y-6">
@@ -764,11 +802,37 @@ export default function TemplateEditor() {
               <div className="relative overflow-hidden" style={{ width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT }}>
                 {templateType === 'VIDEO' ? (
                   mediaPreviewUrl ? (
-                    <video
-                      src={mediaPreviewUrl}
-                      controls
-                      className="absolute inset-0 h-full w-full bg-black object-contain"
-                    />
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={mediaPreviewUrl}
+                        playsInline
+                        preload="metadata"
+                        onPlay={() => setIsVideoPlaying(true)}
+                        onPause={() => setIsVideoPlaying(false)}
+                        onEnded={() => setIsVideoPlaying(false)}
+                        className="absolute inset-0 z-0 h-full w-full bg-black object-cover"
+                      />
+                      <div
+                        className="pointer-events-none absolute z-30 border-2 border-indigo-500 bg-indigo-500/20 shadow-[0_0_0_1px_rgba(255,255,255,0.9)]"
+                        style={videoFrameOverlayStyle}
+                        aria-hidden="true"
+                      />
+                      <div className="absolute inset-x-3 bottom-3 z-40 flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-black/60 px-3 py-2 text-white shadow-lg backdrop-blur">
+                        <button
+                          type="button"
+                          onClick={toggleVideoPlayback}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-zinc-900 transition-colors hover:bg-zinc-100"
+                          aria-label={isVideoPlaying ? 'Pause video preview' : 'Play video preview'}
+                          title={isVideoPlaying ? 'Pause video preview' : 'Play video preview'}
+                        >
+                          {isVideoPlaying ? <Pause size={17} /> : <Play size={17} />}
+                        </button>
+                        <div className="min-w-0 flex-1 text-xs font-semibold text-white/80">
+                          Video preview
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center bg-black text-sm font-medium text-white/70">
                       Video Preview
@@ -787,7 +851,7 @@ export default function TemplateEditor() {
                 <Stage
                   width={TEMPLATE_CANVAS_WIDTH}
                   height={TEMPLATE_CANVAS_HEIGHT}
-                  className="absolute inset-0"
+                  className="absolute inset-0 z-10"
                   onMouseDown={(e) => {
                     const clickedOnEmpty = e.target === e.target.getStage();
 
@@ -822,6 +886,7 @@ export default function TemplateEditor() {
                           setSelected(false);
                         }}
                         onDragEnd={(e) => {
+                          setShouldExportBannerCrop(true);
                           setBannerCrop(
                             clampBackgroundCrop(
                               {
@@ -977,6 +1042,7 @@ export default function TemplateEditor() {
                 <button
                   onClick={() => {
                     if (bgImage?.width && bgImage?.height) {
+                      setShouldExportBannerCrop(true);
                       setBannerCrop(createDefaultBackgroundCrop(bgImage.width, bgImage.height));
                     }
                   }}
