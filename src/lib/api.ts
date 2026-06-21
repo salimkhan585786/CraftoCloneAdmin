@@ -45,9 +45,14 @@ export const API = axios.create({
 let refreshPromise: Promise<string | null> | null = null;
 const MAX_REQUEST_RETRIES = 2;
 const RETRY_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const AUTH_FAILURE_STATUS_CODES = new Set([401, 403]);
 
 function isRefreshRequest(config?: InternalAxiosRequestConfig) {
   return config?.url?.includes('/v1/auth/refresh');
+}
+
+function isLoginRequest(config?: InternalAxiosRequestConfig) {
+  return config?.url?.includes('/v1/auth/admin/login');
 }
 
 function delay(ms: number) {
@@ -70,6 +75,25 @@ function shouldRetryRequest(error: AxiosError) {
   }
 
   return RETRY_STATUS_CODES.has(error.response.status);
+}
+
+function getResponseMessage(error: AxiosError) {
+  const responseData = error.response?.data as { message?: unknown } | undefined;
+  return typeof responseData?.message === 'string' ? responseData.message : '';
+}
+
+function isAuthFailure(error: AxiosError) {
+  const status = error.response?.status;
+
+  if (!status || !AUTH_FAILURE_STATUS_CODES.has(status)) {
+    return false;
+  }
+
+  if (status === 401) {
+    return true;
+  }
+
+  return getResponseMessage(error).toLowerCase().includes('admin access required');
 }
 
 export async function refreshAccessToken() {
@@ -133,12 +157,12 @@ API.interceptors.response.use(
       }
     }
 
-    if (
-      axiosError.response?.status !== 401 ||
-      originalRequest?._retry ||
-      originalRequest?.skipAuthRefresh ||
-      isRefreshRequest(originalRequest)
-    ) {
+    if (!isAuthFailure(axiosError) || isLoginRequest(originalRequest) || isRefreshRequest(originalRequest)) {
+      return Promise.reject(axiosError);
+    }
+
+    if (originalRequest?._retry || originalRequest?.skipAuthRefresh) {
+      expireAuthSession();
       return Promise.reject(axiosError);
     }
 
@@ -146,6 +170,7 @@ API.interceptors.response.use(
     const nextAccessToken = await refreshAccessToken();
 
     if (!nextAccessToken) {
+      expireAuthSession();
       return Promise.reject(axiosError);
     }
 

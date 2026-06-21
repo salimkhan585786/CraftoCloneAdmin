@@ -9,25 +9,27 @@ import {
   Square,
   RectangleHorizontal,
   ChevronLeft,
-  Film,
-  Image as ImageIcon,
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminTemplate, BackgroundCrop, PhotoFrame, TemplatePayload } from '../types';
 import { templateService } from '../services/templateService';
 
-const TEMPLATE_CANVAS_WIDTH = 400;
-const TEMPLATE_CANVAS_HEIGHT = 560;
+const TEMPLATE_CANVAS_WIDTH = 300;
+const TEMPLATE_CANVAS_HEIGHT = 300;
+const REQUIRED_MEDIA_WIDTH = 300;
+const REQUIRED_MEDIA_HEIGHT = 300;
 const MIN_BANNER_SCALE = 1;
 const MAX_BANNER_SCALE = 4;
+const MIN_FRAME_SIZE = 5;
+const MAX_FRAME_SIZE = 300;
 
 type EditorMode = 'crop' | 'frame';
 
 const emptyFrame: PhotoFrame = {
   shape: 'rectangle',
-  x: 100,
-  y: 100,
-  width: 200,
+  x: 75,
+  y: 75,
+  width: 150,
   height: 150,
   radius: 0,
 };
@@ -64,6 +66,36 @@ function isBackgroundCrop(value: unknown): value is BackgroundCrop {
 
 function getDisplayUrl(remoteUrl: string | null | undefined, file: File) {
   return remoteUrl || URL.createObjectURL(file);
+}
+
+function getLoadedImageSize(image: HTMLImageElement | undefined) {
+  if (!image) {
+    return null;
+  }
+
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+
+  if (!width || !height) {
+    return null;
+  }
+
+  return { width, height };
+}
+
+function getStringConfigValue(config: Record<string, unknown> | null | undefined, key: string) {
+  const value = config?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function getTemplatePreviewUrl(template: AdminTemplate) {
+  const backgroundPreviewUrl = getStringConfigValue(template.config_json, 'background_preview');
+
+  if (template.type === 'VIDEO') {
+    return template.template_url || backgroundPreviewUrl || template.thumbnail_url || null;
+  }
+
+  return backgroundPreviewUrl || template.thumbnail_url || template.template_url || null;
 }
 
 function getNormalizedFileName(fileName: string) {
@@ -171,6 +203,10 @@ function slugifyFileName(value: string) {
     .replace(/^-+|-+$/g, '') || 'template-banner';
 }
 
+function clampValue(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 async function canvasToFile(canvas: HTMLCanvasElement, fileName: string, mimeType: string) {
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((nextBlob) => resolve(nextBlob), mimeType, 0.92);
@@ -181,6 +217,58 @@ async function canvasToFile(canvas: HTMLCanvasElement, fileName: string, mimeTyp
   }
 
   return new File([blob], fileName, { type: mimeType });
+}
+
+function getUploadedMediaSize(file: File) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+
+    if (file.type.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        cleanup();
+        resolve({ width, height });
+      };
+      video.onerror = () => {
+        cleanup();
+        reject(new Error('Unable to read video dimensions.'));
+      };
+      video.src = objectUrl;
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      cleanup();
+      resolve({ width, height });
+    };
+    image.onerror = () => {
+      cleanup();
+      reject(new Error('Unable to read image dimensions.'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function shouldProceedWithMedia(file: File) {
+  if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+    return true;
+  }
+
+  const { width, height } = await getUploadedMediaSize(file);
+  if (width === REQUIRED_MEDIA_WIDTH && height === REQUIRED_MEDIA_HEIGHT) {
+    return true;
+  }
+
+  return window.confirm(
+    `Uploaded media is ${width}x${height}. Required size is exactly ${REQUIRED_MEDIA_WIDTH}x${REQUIRED_MEDIA_HEIGHT}. Proceed anyway?`,
+  );
 }
 
 export default function TemplateEditor() {
@@ -207,7 +295,13 @@ export default function TemplateEditor() {
   const [bannerCrop, setBannerCrop] = useState<BackgroundCrop | null>(null);
   const [selected, setSelected] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>('crop');
-  const [bgImage] = useImage(templateType === 'IMAGE' ? mediaPreviewUrl || '' : '', 'anonymous');
+  const imagePreviewUrl = templateType === 'IMAGE' ? mediaPreviewUrl || '' : '';
+  const [corsBgImage, corsImageStatus] = useImage(imagePreviewUrl, 'anonymous');
+  const [plainBgImage] = useImage(corsImageStatus === 'failed' ? imagePreviewUrl : '');
+  const bgImage = corsBgImage || plainBgImage;
+  const bgImageSize = getLoadedImageSize(bgImage);
+  const bgImageWidth = bgImageSize?.width ?? 0;
+  const bgImageHeight = bgImageSize?.height ?? 0;
 
   const shapeRef = useRef<any>(null);
   const trRef = useRef<any>(null);
@@ -226,7 +320,7 @@ export default function TemplateEditor() {
       return;
     }
 
-    if (!bgImage?.width || !bgImage?.height) {
+    if (!bgImageWidth || !bgImageHeight) {
       return;
     }
 
@@ -235,17 +329,17 @@ export default function TemplateEditor() {
         return clampBackgroundCrop(
           {
             ...currentCrop,
-            mediaWidth: bgImage.width,
-            mediaHeight: bgImage.height,
+            mediaWidth: bgImageWidth,
+            mediaHeight: bgImageHeight,
           },
-          bgImage.width,
-          bgImage.height,
+          bgImageWidth,
+          bgImageHeight,
         );
       }
 
-      return createDefaultBackgroundCrop(bgImage.width, bgImage.height);
+      return createDefaultBackgroundCrop(bgImageWidth, bgImageHeight);
     });
-  }, [bgImage, templateType]);
+  }, [bgImage, bgImageWidth, bgImageHeight, templateType]);
 
   useEffect(() => {
     if (!templateId) {
@@ -275,7 +369,7 @@ export default function TemplateEditor() {
     setLanguage(template.language || 'en');
     setThumbnailKey(template.thumbnail_key || '');
     setTemplateKey(template.template_key || '');
-    setMediaPreviewUrl(template.template_url || null);
+    setMediaPreviewUrl(getTemplatePreviewUrl(template));
     setIsPremium(Boolean(template.is_premium));
     setExistingConfigJson(template.config_json ?? null);
     setSelected(false);
@@ -323,14 +417,17 @@ export default function TemplateEditor() {
 
     const updatedFrame = {
       ...frame,
-      width: Math.max(5, node.width() * scaleX),
-      height: Math.max(5, node.height() * scaleY),
+      width: clampValue(node.width() * scaleX, MIN_FRAME_SIZE, MAX_FRAME_SIZE),
+      height: clampValue(node.height() * scaleY, MIN_FRAME_SIZE, MAX_FRAME_SIZE),
     };
 
     if (frame.shape === 'circle') {
-      updatedFrame.radius = updatedFrame.width / 2;
-      updatedFrame.x = node.x() - updatedFrame.width / 2;
-      updatedFrame.y = node.y() - updatedFrame.height / 2;
+      const size = Math.max(updatedFrame.width, updatedFrame.height);
+      updatedFrame.width = size;
+      updatedFrame.height = size;
+      updatedFrame.radius = size / 2;
+      updatedFrame.x = node.x() - size / 2;
+      updatedFrame.y = node.y() - size / 2;
     } else if (frame.shape === 'square') {
       const size = Math.max(updatedFrame.width, updatedFrame.height);
       updatedFrame.width = size;
@@ -343,6 +440,37 @@ export default function TemplateEditor() {
     }
 
     setFrame(updatedFrame);
+  };
+
+  const updateFrameSize = (nextWidth: number, nextHeight = nextWidth) => {
+    setFrame((currentFrame) => {
+      if (currentFrame.shape === 'circle') {
+        const size = clampValue(nextWidth, MIN_FRAME_SIZE, MAX_FRAME_SIZE);
+        return {
+          ...currentFrame,
+          width: size,
+          height: size,
+          radius: size / 2,
+        };
+      }
+
+      if (currentFrame.shape === 'square') {
+        const size = clampValue(nextWidth, MIN_FRAME_SIZE, MAX_FRAME_SIZE);
+        return {
+          ...currentFrame,
+          width: size,
+          height: size,
+          radius: 0,
+        };
+      }
+
+      return {
+        ...currentFrame,
+        width: clampValue(nextWidth, MIN_FRAME_SIZE, MAX_FRAME_SIZE),
+        height: clampValue(nextHeight, MIN_FRAME_SIZE, MAX_FRAME_SIZE),
+        radius: 0,
+      };
+    });
   };
 
   const updateBackgroundScale = (nextScale: number) => {
@@ -380,6 +508,19 @@ export default function TemplateEditor() {
   const handleAssetUpload = async (file: File) => {
     setError('');
     setSuccessMessage('');
+
+    let canUpload = false;
+    try {
+      canUpload = await shouldProceedWithMedia(file);
+    } catch (dimensionError) {
+      setError(dimensionError instanceof Error ? dimensionError.message : 'Unable to validate media dimensions.');
+      return;
+    }
+
+    if (!canUpload) {
+      return;
+    }
+
     setIsUploadingBanner(true);
 
     try {
@@ -424,6 +565,9 @@ export default function TemplateEditor() {
     nextBackgroundPreview = mediaPreviewUrl,
   ): TemplatePayload => {
     const nextConfig = { ...(existingConfigJson ?? {}) };
+
+    nextConfig.width = TEMPLATE_CANVAS_WIDTH;
+    nextConfig.height = TEMPLATE_CANVAS_HEIGHT;
 
     if (nextBackgroundPreview) {
       nextConfig.background_preview = nextBackgroundPreview;
@@ -550,6 +694,7 @@ export default function TemplateEditor() {
   };
 
   const cropMetrics = getBackgroundCropMetrics(bannerCrop);
+  const canRenderBackgroundInStage = Boolean(templateType === 'IMAGE' && bgImage && bannerCrop && cropMetrics);
 
   return (
     <div className="space-y-6">
@@ -603,8 +748,8 @@ export default function TemplateEditor() {
           Loading template details...
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <div className="lg:col-span-3 bg-zinc-100 rounded-3xl border border-zinc-200 overflow-hidden min-h-[600px] relative flex items-start justify-center">
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-8 items-start">
+          <div className="bg-zinc-100 rounded-3xl border border-zinc-200 overflow-hidden min-h-[420px] relative flex items-start justify-start p-6 lg:p-8">
             {!mediaPreviewUrl && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 p-8 text-center">
                 <div className="w-20 h-20 bg-zinc-200 rounded-full flex items-center justify-center mb-4">
@@ -631,6 +776,14 @@ export default function TemplateEditor() {
                   )
                 ) : null}
 
+                {templateType === 'IMAGE' && mediaPreviewUrl && !canRenderBackgroundInStage ? (
+                  <img
+                    src={mediaPreviewUrl}
+                    alt="Template preview"
+                    className="absolute inset-0 h-full w-full bg-white object-cover"
+                  />
+                ) : null}
+
                 <Stage
                   width={TEMPLATE_CANVAS_WIDTH}
                   height={TEMPLATE_CANVAS_HEIGHT}
@@ -652,7 +805,7 @@ export default function TemplateEditor() {
                   }}
                 >
                   <Layer>
-                    {templateType === 'IMAGE' && bgImage && bannerCrop && cropMetrics && (
+                    {canRenderBackgroundInStage && (
                       <KonvaImage
                         image={bgImage}
                         x={bannerCrop.x}
@@ -733,8 +886,9 @@ export default function TemplateEditor() {
                     {selected && editorMode === 'frame' && (
                       <Transformer
                         ref={trRef}
+                        keepRatio={frame.shape !== 'rectangle'}
                         boundBoxFunc={(oldBox, newBox) => {
-                          if (newBox.width < 5 || newBox.height < 5) {
+                          if (newBox.width < MIN_FRAME_SIZE || newBox.height < MIN_FRAME_SIZE) {
                             return oldBox;
                           }
 
@@ -748,7 +902,8 @@ export default function TemplateEditor() {
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            <div className="space-y-6">
             <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
               <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Template Details</h3>
               <div className="space-y-3">
@@ -801,60 +956,6 @@ export default function TemplateEditor() {
             </section>
 
             <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Uploaded Banner</h3>
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-400 mb-3">Banner Preview</p>
-                {mediaPreviewUrl ? (
-                  templateType === 'VIDEO' ? (
-                    <video src={mediaPreviewUrl} controls className="w-full rounded-2xl bg-black max-h-48" />
-                  ) : (
-                    <img src={mediaPreviewUrl} alt="Banner preview" className="w-full rounded-2xl object-cover max-h-48" />
-                  )
-                ) : (
-                  <div className="h-32 rounded-2xl border border-dashed border-zinc-300 flex items-center justify-center text-zinc-400">
-                    {templateType === 'VIDEO' ? <Film size={24} /> : <ImageIcon size={24} />}
-                  </div>
-                )}
-                <p className="mt-3 text-xs text-zinc-500">
-                  Banner upload now auto-fills both `template_key` and `thumbnail_key`. You can still edit those fields manually before saving.
-                </p>
-              </div>
-            </section>
-
-            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
-              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Editor Mode</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    setEditorMode('crop');
-                    setSelected(false);
-                  }}
-                  disabled={templateType !== 'IMAGE' || !bgImage}
-                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
-                    editorMode === 'crop'
-                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
-                  } disabled:opacity-50`}
-                >
-                  Crop Banner
-                </button>
-                <button
-                  onClick={() => setEditorMode('frame')}
-                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
-                    editorMode === 'frame'
-                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
-                  }`}
-                >
-                  Place Photo
-                </button>
-              </div>
-              <p className="mt-3 text-xs text-zinc-500">
-                Crop mode matches the mobile poster viewport. Drag the image and use mouse wheel or the zoom slider to choose the exact visible area.
-              </p>
-            </section>
-
-            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
               <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Banner Crop</h3>
               <div className="space-y-4">
                 <div>
@@ -888,6 +989,150 @@ export default function TemplateEditor() {
                   This saved crop is sent with the template so the React Native app can render the same banner position before placing the user photo.
                 </p>
               </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Frame Size</h3>
+              <div className="space-y-4">
+                {frame.shape === 'rectangle' ? (
+                  <>
+                    <div>
+                      <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
+                        <span>Width</span>
+                        <span>{Math.round(frame.width)}px</span>
+                      </div>
+                      <div className="grid grid-cols-[1fr_76px] gap-3">
+                        <input
+                          type="range"
+                          min={MIN_FRAME_SIZE}
+                          max={MAX_FRAME_SIZE}
+                          step={1}
+                          value={Math.round(frame.width)}
+                          onChange={(e) => updateFrameSize(Number(e.target.value), frame.height)}
+                          className="w-full"
+                        />
+                        <input
+                          type="number"
+                          min={MIN_FRAME_SIZE}
+                          max={MAX_FRAME_SIZE}
+                          value={Math.round(frame.width)}
+                          onChange={(e) => updateFrameSize(Number(e.target.value), frame.height)}
+                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
+                        <span>Height</span>
+                        <span>{Math.round(frame.height)}px</span>
+                      </div>
+                      <div className="grid grid-cols-[1fr_76px] gap-3">
+                        <input
+                          type="range"
+                          min={MIN_FRAME_SIZE}
+                          max={MAX_FRAME_SIZE}
+                          step={1}
+                          value={Math.round(frame.height)}
+                          onChange={(e) => updateFrameSize(frame.width, Number(e.target.value))}
+                          className="w-full"
+                        />
+                        <input
+                          type="number"
+                          min={MIN_FRAME_SIZE}
+                          max={MAX_FRAME_SIZE}
+                          value={Math.round(frame.height)}
+                          onChange={(e) => updateFrameSize(frame.width, Number(e.target.value))}
+                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
+                      <span>Size</span>
+                      <span>{Math.round(frame.width)}px</span>
+                    </div>
+                    <div className="grid grid-cols-[1fr_76px] gap-3">
+                      <input
+                        type="range"
+                        min={MIN_FRAME_SIZE}
+                        max={MAX_FRAME_SIZE}
+                        step={1}
+                        value={Math.round(frame.width)}
+                        onChange={(e) => updateFrameSize(Number(e.target.value))}
+                        className="w-full"
+                      />
+                      <input
+                        type="number"
+                        min={MIN_FRAME_SIZE}
+                        max={MAX_FRAME_SIZE}
+                        value={Math.round(frame.width)}
+                        onChange={(e) => updateFrameSize(Number(e.target.value))}
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setEditorMode('frame');
+                    setSelected(true);
+                  }}
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+                >
+                  Select Frame
+                </button>
+              </div>
+            </section>
+
+            <section className="bg-zinc-900 p-6 rounded-3xl text-white shadow-xl shadow-zinc-200">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-white/10 rounded-lg">
+                  <Move size={18} />
+                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wider">Editor Tips</h3>
+              </div>
+              <ul className="text-xs text-zinc-400 space-y-2 list-disc pl-4">
+                <li>Upload banner media first so the preview and asset key are filled automatically.</li>
+                <li>Crop the banner first, then switch to photo mode to place the user image frame.</li>
+                <li>Open templates from Categories to load and edit an existing template quickly.</li>
+              </ul>
+            </section>
+            </div>
+
+            <div className="space-y-6">
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Editor Mode</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setEditorMode('crop');
+                    setSelected(false);
+                  }}
+                  disabled={templateType !== 'IMAGE' || !bgImage}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                    editorMode === 'crop'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
+                  } disabled:opacity-50`}
+                >
+                  Crop Banner
+                </button>
+                <button
+                  onClick={() => setEditorMode('frame')}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                    editorMode === 'frame'
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
+                  }`}
+                >
+                  Place Photo
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                Crop mode matches the mobile poster viewport. Drag the image and use mouse wheel or the zoom slider to choose the exact visible area.
+              </p>
             </section>
 
             <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
@@ -984,20 +1229,7 @@ export default function TemplateEditor() {
                 )}
               </div>
             </section>
-
-            <section className="bg-zinc-900 p-6 rounded-3xl text-white shadow-xl shadow-zinc-200">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-white/10 rounded-lg">
-                  <Move size={18} />
-                </div>
-                <h3 className="text-sm font-bold uppercase tracking-wider">Editor Tips</h3>
-              </div>
-              <ul className="text-xs text-zinc-400 space-y-2 list-disc pl-4">
-                <li>Upload banner media first so the preview and asset key are filled automatically.</li>
-                <li>Crop the banner first, then switch to photo mode to place the user image frame.</li>
-                <li>Open templates from Categories to load and edit an existing template quickly.</li>
-              </ul>
-            </section>
+            </div>
           </div>
         </div>
       )}

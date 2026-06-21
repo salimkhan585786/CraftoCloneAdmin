@@ -90,6 +90,26 @@ async function updateTemplate(id: string, payload: TemplatePayload) {
   }
 }
 
+async function setTemplateActive(id: string, isActive: boolean) {
+  try {
+    const template = await getTemplate(id);
+    const response = await API.put<ApiEnvelope<AdminTemplate>>(`/v1/templates/admin/${id}`, {
+      name: template.name,
+      type: template.type,
+      category_id: template.category_id,
+      thumbnail_key: template.thumbnail_key,
+      template_key: template.template_key,
+      config_json: template.config_json,
+      is_premium: template.is_premium,
+      language: template.language,
+      is_active: isActive,
+    });
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error, `Unable to ${isActive ? 'resume' : 'pause'} template.`));
+  }
+}
+
 async function deleteTemplate(id: string) {
   try {
     const response = await API.delete<ApiEnvelope<AdminTemplate>>(`/v1/templates/admin/${id}`);
@@ -100,9 +120,7 @@ async function deleteTemplate(id: string) {
 }
 
 async function getPresignedUpload(payload: PresignedUploadPayload) {
-  const response = await API.post<ApiEnvelope<PresignedUploadResponse>>('/v1/s3/presigned-url', payload, {
-    skipAuthRefresh: true,
-  });
+  const response = await API.post<ApiEnvelope<PresignedUploadResponse>>('/v1/s3/presigned-url', payload);
 
   return response.data.data;
 }
@@ -169,6 +187,7 @@ export const templateService = {
   getTemplate,
   createTemplate,
   updateTemplate,
+  setTemplateActive,
   deleteTemplate,
   uploadAsset,
 };

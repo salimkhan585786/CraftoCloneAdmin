@@ -57,6 +57,7 @@ export interface TemplatePayload {
   config_json: Record<string, unknown> | null;
   is_premium: boolean;
   language: string;
+  is_active?: boolean;
 }
 
 export interface AdminTemplate {
@@ -93,6 +94,7 @@ export interface AdminTemplateSummary {
   language?: string;
   usage_count: number;
   is_premium: boolean;
+  is_active?: boolean;
   category: TemplateCategorySummary;
   updatedAt?: string;
 }
