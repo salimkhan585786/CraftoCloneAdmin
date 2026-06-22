@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Film, Image as ImageIcon, Pause, Play, Plus, Search, Trash2 } from 'lucide-react';
+import { ExternalLink, Film, Image as ImageIcon, Pause, Play, Plus, Search, Star, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AdminCategory, AdminTemplateSummary } from '../types';
 import { categoryService } from '../services/categoryService';
@@ -10,10 +10,12 @@ export default function Templates() {
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [categoryId, setCategoryId] = useState('');
   const [type, setType] = useState('');
+  const [trendingFilter, setTrendingFilter] = useState('');
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const selectedCategoryForAdd = categoryId || categories[0]?.id || '';
 
@@ -87,6 +89,46 @@ export default function Templates() {
     }
   };
 
+  const handleTrendingToggle = async (template: AdminTemplateSummary) => {
+    const nextTrending = !template.is_trending;
+    const action = nextTrending ? 'mark as trending' : 'remove from trending';
+
+    if (!window.confirm(`${nextTrending ? 'Mark' : 'Remove'} "${template.name}" as trending?`)) {
+      return;
+    }
+
+    try {
+      setBusyId(template.id);
+      setError('');
+      if (nextTrending) {
+        await templateService.markTrending(template.id);
+      } else {
+        await templateService.removeTrending(template.id);
+      }
+      setTemplates((current) => current.map((item) => (item.id === template.id ? { ...item, is_trending: nextTrending } : item)));
+    } catch (trendingError) {
+      setError(trendingError instanceof Error ? trendingError.message : `Unable to ${action} template.`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleCleanupTrending = async () => {
+    if (!window.confirm('Cleanup all expired trending templates?')) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccessMessage('');
+      const result = await templateService.cleanupTrending();
+      setSuccessMessage(`Cleaned up ${result.cleaned} expired trending template(s).`);
+      setTemplates((current) => current.map((item) => (item.is_trending ? { ...item, is_trending: false, trending_expires_at: null } : item)));
+    } catch (cleanupError) {
+      setError(cleanupError instanceof Error ? cleanupError.message : 'Unable to cleanup trending templates.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -95,17 +137,27 @@ export default function Templates() {
           <p className="mt-1 text-zinc-500">View and manage all templates at once.</p>
         </div>
 
-        <Link
-          to={selectedCategoryForAdd ? `/editor?categoryId=${selectedCategoryForAdd}` : '/categories'}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-zinc-800"
-        >
-          <Plus size={18} />
-          Add Template
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleCleanupTrending}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+          >
+            <Star size={18} />
+            Cleanup Trending
+          </button>
+          <Link
+            to={selectedCategoryForAdd ? `/editor?categoryId=${selectedCategoryForAdd}` : '/categories'}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-zinc-800"
+          >
+            <Plus size={18} />
+            Add Template
+          </Link>
+        </div>
       </header>
 
       <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px_160px]">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px_160px_160px]">
           <label className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5">
             <Search size={18} className="text-zinc-400" />
             <input
@@ -138,10 +190,22 @@ export default function Templates() {
             <option value="IMAGE">Image</option>
             <option value="VIDEO">Video</option>
           </select>
+
+          <select
+            value={trendingFilter}
+            onChange={(e) => setTrendingFilter(e.target.value)}
+            className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm outline-none"
+          >
+            <option value="">All templates</option>
+            <option value="trending">Trending only</option>
+            <option value="not_trending">Non-trending only</option>
+          </select>
         </div>
       </section>
 
       {error && <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">{error}</div>}
+
+      {successMessage && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-600">{successMessage}</div>}
 
       {isLoading ? (
         <div className="rounded-3xl border border-dashed border-zinc-300 bg-white p-10 text-center text-zinc-500">Loading templates...</div>
@@ -149,7 +213,13 @@ export default function Templates() {
         <div className="rounded-3xl border border-dashed border-zinc-300 bg-white p-10 text-center text-zinc-500">No templates found.</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {templates.map((template) => (
+          {templates
+            .filter((template) => {
+              if (trendingFilter === 'trending') return template.is_trending === true;
+              if (trendingFilter === 'not_trending') return template.is_trending !== true;
+              return true;
+            })
+            .map((template) => (
             <div key={template.id} className={`rounded-3xl border bg-white p-4 shadow-sm ${template.is_active === false ? 'border-amber-200 opacity-75' : 'border-zinc-200'}`}>
               <div className="flex items-start gap-4">
                 {template.thumbnail_url ? (
@@ -165,6 +235,7 @@ export default function Templates() {
                     <h2 className="truncate font-bold text-zinc-900">{template.name}</h2>
                     <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-500">{template.type}</span>
                     {template.is_premium && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">Premium</span>}
+                    {template.is_trending && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Trending</span>}
                     {template.is_active === false && <span className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-600">Paused</span>}
                   </div>
 
@@ -189,6 +260,19 @@ export default function Templates() {
                     >
                       {template.is_active === false ? <Play size={16} /> : <Pause size={16} />}
                       {template.is_active === false ? 'Resume' : 'Pause'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTrendingToggle(template)}
+                      disabled={busyId === template.id}
+                      className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
+                        template.is_trending
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100'
+                      }`}
+                    >
+                      <Star size={16} className={template.is_trending ? 'fill-emerald-500' : ''} />
+                      {template.is_trending ? 'Trending' : 'Trend'}
                     </button>
                     <button
                       type="button"

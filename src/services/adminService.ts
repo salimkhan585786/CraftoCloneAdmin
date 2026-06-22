@@ -44,8 +44,17 @@ async function listUsers(params: ListUsersParams = {}) {
   }
 }
 
+async function deleteUser(id: string) {
+  try {
+    await API.delete(`/v1/admin/users/${id}`);
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to delete user.'));
+  }
+}
+
 export const adminService = {
   getAnalytics,
   getTopTemplates,
   listUsers,
+  deleteUser,
 };

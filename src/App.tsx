@@ -8,6 +8,7 @@ import TemplateEditor from './pages/TemplateEditor';
 import Users from './pages/Users';
 import Languages from './pages/Languages';
 import SubscriptionPlans from './pages/SubscriptionPlans';
+import Profile from './pages/Profile';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import { authService } from './services/authService';
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/languages" element={<Languages />} />
           <Route path="/subscriptions" element={<SubscriptionPlans />} />
           <Route path="/editor" element={<TemplateEditor />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

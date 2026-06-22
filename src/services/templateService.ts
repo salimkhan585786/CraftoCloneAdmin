@@ -7,6 +7,7 @@ import {
   PresignedUploadPayload,
   TemplateListParams,
   TemplatePayload,
+  TrendingCleanupResult,
   UploadedAsset,
 } from '../types';
 import { getErrorMessage } from './apiHelpers';
@@ -119,6 +120,42 @@ async function deleteTemplate(id: string) {
   }
 }
 
+async function markTrending(id: string) {
+  try {
+    const response = await API.patch<ApiEnvelope<AdminTemplate>>(`/v1/templates/admin/${id}/trending`);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to mark template as trending.'));
+  }
+}
+
+async function removeTrending(id: string) {
+  try {
+    const response = await API.delete<ApiEnvelope<AdminTemplate>>(`/v1/templates/admin/${id}/trending`);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to remove trending status.'));
+  }
+}
+
+async function cleanupTrending() {
+  try {
+    const response = await API.post<ApiEnvelope<TrendingCleanupResult>>('/v1/templates/admin/trending/cleanup');
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to cleanup expired trending templates.'));
+  }
+}
+
+async function getTrendingTemplates() {
+  try {
+    const response = await API.get<ApiEnvelope<AdminTemplateSummary[]>>('/v1/templates/trending');
+    return response.data.data || [];
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to load trending templates.'));
+  }
+}
+
 async function getPresignedUpload(payload: PresignedUploadPayload) {
   const response = await API.post<ApiEnvelope<PresignedUploadResponse>>('/v1/s3/presigned-url', payload);
 
@@ -189,5 +226,9 @@ export const templateService = {
   updateTemplate,
   setTemplateActive,
   deleteTemplate,
+  markTrending,
+  removeTrending,
+  cleanupTrending,
+  getTrendingTemplates,
   uploadAsset,
 };

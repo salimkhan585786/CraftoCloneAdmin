@@ -44,6 +44,14 @@ export function setAuthSession(accessToken: string, refreshToken: string, admin:
   window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
+export function updateStoredAdmin(admin: Partial<StoredAdmin>) {
+  const current = getStoredAdmin();
+  if (!current) return;
+  const updated = { ...current, ...admin };
+  localStorage.setItem(ADMIN_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
+
 export function clearAuthStorage() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);

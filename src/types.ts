@@ -71,6 +71,8 @@ export interface AdminTemplate {
   thumbnail_url?: string | null;
   template_url?: string | null;
   is_active?: boolean;
+  is_trending?: boolean;
+  trending_expires_at?: string | null;
   usage_count?: number;
   category?: TemplateCategorySummary;
   is_premium: boolean;
@@ -95,6 +97,8 @@ export interface AdminTemplateSummary {
   usage_count: number;
   is_premium: boolean;
   is_active?: boolean;
+  is_trending?: boolean;
+  trending_expires_at?: string | null;
   category: TemplateCategorySummary;
   updatedAt?: string;
 }
@@ -193,4 +197,20 @@ export interface SubscriptionStatus {
   plan_type: 'FREE' | 'PREMIUM' | string;
   is_active: boolean;
   expires_at: string | null;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}
+
+export interface UpdateProfilePayload {
+  name?: string;
+  email?: string;
+}
+
+export interface TrendingCleanupResult {
+  cleaned: number;
 }

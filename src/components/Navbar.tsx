@@ -26,10 +26,13 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-zinc-600 px-3 py-1.5 rounded-full bg-zinc-50 border border-zinc-100">
+        <button
+          onClick={() => navigate('/profile')}
+          className="flex items-center gap-2 text-zinc-600 px-3 py-1.5 rounded-full bg-zinc-50 border border-zinc-100 hover:border-zinc-300 hover:bg-zinc-100 transition-colors cursor-pointer"
+        >
           <User size={16} />
           <span className="text-sm font-medium">{admin?.name || 'Admin'}</span>
-        </div>
+        </button>
         <button
           onClick={handleLogout}
           disabled={isLoggingOut}

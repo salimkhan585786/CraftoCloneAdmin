@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Users as UsersIcon } from 'lucide-react';
+import { Search, Trash2, Users as UsersIcon } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { AdminUser, PaginatedResponse } from '../types';
 
@@ -19,6 +19,7 @@ export default function Users() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -48,6 +49,31 @@ export default function Users() {
 
   const users = usersResponse?.data || [];
   const totalPages = usersResponse ? Math.max(1, Math.ceil(usersResponse.total / usersResponse.limit)) : 1;
+
+  const handleDeleteUser = async (user: AdminUser) => {
+    const displayName = user.name || user.phone_number || user.id;
+    if (!window.confirm(`Delete user "${displayName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setBusyId(user.id);
+      setError('');
+      await adminService.deleteUser(user.id);
+      setUsersResponse((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          data: current.data.filter((item) => item.id !== user.id),
+          total: current.total - 1,
+        };
+      });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete user.');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -96,17 +122,18 @@ export default function Users() {
         </div>
 
         <div className="mt-6 overflow-hidden rounded-3xl border border-zinc-200">
-          <div className="hidden grid-cols-[1.2fr_0.85fr_0.65fr_1fr_1fr] gap-4 bg-zinc-50 px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 md:grid">
+          <div className="hidden grid-cols-[1.2fr_0.85fr_0.65fr_1fr_1fr_100px] gap-4 bg-zinc-50 px-5 py-3 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 md:grid">
             <span>User</span>
             <span>Phone</span>
             <span>Language</span>
             <span>Subscription</span>
             <span>Created</span>
+            <span></span>
           </div>
 
           <div className="divide-y divide-zinc-200">
             {users.map((user) => (
-              <div key={user.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1.2fr_0.85fr_0.65fr_1fr_1fr] md:items-center">
+              <div key={user.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1.2fr_0.85fr_0.65fr_1fr_1fr_100px] md:items-center">
                 <div>
                   <p className="font-semibold text-zinc-900">{user.name || 'Unnamed user'}</p>
                   <p className="mt-1 text-xs text-zinc-500">{user.id}</p>
@@ -132,6 +159,17 @@ export default function Users() {
                 <div>
                   <p className="text-sm text-zinc-700">{formatDate(user.createdAt)}</p>
                   <p className="mt-1 text-xs text-zinc-500">{user.status}</p>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteUser(user)}
+                    disabled={busyId === user.id}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-60"
+                  >
+                    <Trash2 size={14} />
+                    {busyId === user.id ? '...' : 'Delete'}
+                  </button>
                 </div>
               </div>
             ))}
