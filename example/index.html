@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crafto Dev Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0f19;
+      --surface:   #111827;
+      --surface2:  #1a2236;
+      --border:    #1e2d45;
+      --accent:    #4f8ef7;
+      --accent2:   #7c3aed;
+      --success:   #22c55e;
+      --warning:   #f59e0b;
+      --danger:    #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --radius:    12px;
+      --mono:      'JetBrains Mono', monospace;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.3px;
+    }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .header-badge {
+      margin-left: auto;
+      font-size: 11px;
+      background: rgba(79,142,247,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(79,142,247,0.25);
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-weight: 500;
+    }
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.offline { background: var(--danger); }
+
+    /* ── Layout ── */
+    .app {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      height: calc(100vh - 60px);
+    }
+
+    /* ── Sidebar tabs ── */
+    .sidebar {
+      width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .sidebar-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      padding: 8px 10px 4px;
+      font-weight: 600;
+    }
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: all 0.15s;
+      font-family: 'Inter', sans-serif;
+    }
+    .tab-btn:hover { background: var(--surface2); color: var(--text); }
+    .tab-btn.active { background: rgba(79,142,247,0.12); color: var(--accent); }
+    .tab-btn .step-badge {
+      margin-left: auto;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--surface2);
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .tab-btn.done .step-badge { background: rgba(34,197,94,0.15); color: var(--success); }
+    .tab-btn.active .step-badge { background: rgba(79,142,247,0.2); color: var(--accent); }
+
+    /* ── Main content ── */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .tab-panel { display: none; flex-direction: column; gap: 20px; }
+    .tab-panel.active { display: flex; }
+
+    /* ── Page title ── */
+    .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
+    .page-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Form elements ── */
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    label { font-size: 12px; font-weight: 500; color: var(--muted); }
+    input, select, textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 9px 12px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 80px; font-family: var(--mono); font-size: 12px; }
+    select option { background: var(--surface); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #3b78e7; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: rgba(239,68,68,0.12); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+    .btn-success { background: rgba(34,197,94,0.12); color: var(--success); border: 1px solid rgba(34,197,94,0.2); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* ── Response viewer ── */
+    .response-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.7;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #a8d8a8;
+      transition: all 0.2s;
+    }
+    .response-box.error { color: #ff9999; border-color: rgba(239,68,68,0.3); }
+    .response-box.empty { color: var(--muted); font-style: italic; font-family: 'Inter', sans-serif; font-size: 12px; text-align: center; padding: 30px; }
+
+    /* ── Status pill ── */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .pill-pending   { background: rgba(245,158,11,0.12); color: var(--warning); }
+    .pill-processing{ background: rgba(79,142,247,0.12); color: var(--accent); }
+    .pill-completed { background: rgba(34,197,94,0.12); color: var(--success); }
+    .pill-failed    { background: rgba(239,68,68,0.12); color: var(--danger); }
+
+    /* ── Token box ── */
+    .token-display {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      word-break: break-all;
+      line-height: 1.5;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+    }
+    .token-display.empty { color: var(--muted); font-family: 'Inter', sans-serif; font-size: 12px; }
+
+    /* ── State summary bar ── */
+    .state-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+    .state-item { display: flex; flex-direction: column; gap: 2px; }
+    .state-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+    .state-val { font-size: 12px; font-family: var(--mono); color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .state-val.set { color: var(--success); }
+    .state-val.unset { color: var(--muted); }
+
+    /* ── Progress stepper ── */
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 8px;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .step-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+    .step.done .step-circle { border-color: var(--success); background: rgba(34,197,94,0.12); color: var(--success); }
+    .step.active .step-circle { border-color: var(--accent); background: rgba(79,142,247,0.12); color: var(--accent); }
+    .step-line { flex: 1; height: 1px; background: var(--border); min-width: 20px; }
+
+    /* ── Upload zone ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--bg);
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(79,142,247,0.04); }
+    .upload-zone input[type=file] { display: none; }
+    .upload-zone .uz-icon { font-size: 32px; margin-bottom: 8px; }
+    .upload-zone .uz-text { font-size: 13px; color: var(--muted); }
+    .upload-zone .uz-text strong { color: var(--accent); }
+    .upload-zone.has-file { border-color: var(--success); background: rgba(34,197,94,0.04); }
+    .upload-zone.has-file .uz-text { color: var(--success); }
+
+    /* ── Media card ── */
+    .media-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .media-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+    .media-card .media-preview {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      display: block;
+      background: var(--surface2);
+    }
+    .media-card .media-info { padding: 14px; }
+    .media-card .media-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .media-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+
+    /* ── Toast ── */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+    }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 340px;
+      animation: slideIn 0.25s ease;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.success { border-color: rgba(34,197,94,0.3); }
+    .toast.error   { border-color: rgba(239,68,68,0.3); }
+    .toast.info    { border-color: rgba(79,142,247,0.3); }
+    @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Misc ── */
+    .divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .inline-row { display: flex; align-items: center; gap: 10px; }
+    .tag { display: inline-block; padding: 2px 8px; background: rgba(79,142,247,0.1); color: var(--accent); border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .copy-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 4px; transition: color 0.15s; }
+    .copy-btn:hover { color: var(--accent); }
+
+    /* ── Poll status ── */
+    .poll-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .poll-progress {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .poll-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.5s;
+      animation: pulse-bar 2s ease-in-out infinite;
+    }
+    @keyframes pulse-bar { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    /* ── JSON config editor header ── */
+    .editor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .editor-tabs { display: flex; gap: 4px; }
+    .editor-tab {
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+    }
+    .editor-tab.active { background: rgba(79,142,247,0.12); color: var(--accent); border-color: rgba(79,142,247,0.3); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .form-row { grid-template-columns: 1fr; }
+      .sidebar { width: 180px; }
+      .main { padding: 20px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🎨</div>
+    Crafto Dev Dashboard
+  </div>
+  <div class="server-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">checking...</span>
+  </div>
+  <div class="header-badge">Test Environment</div>
+</header>
+
+<!-- App body -->
+<div class="app">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Flow Steps</div>
+    <button class="tab-btn active" onclick="switchTab('auth')" id="tab-auth">
+      🔐 Auth &amp; Login
+      <span class="step-badge" id="badge-auth">1</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('categories')" id="tab-categories">
+      📂 Categories
+      <span class="step-badge" id="badge-categories">2</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('upload')" id="tab-upload">
+      ☁️ Upload Files
+      <span class="step-badge" id="badge-upload">3</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('template')" id="tab-template">
+      🎨 Create Template
+      <span class="step-badge" id="badge-template">4</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('generate')" id="tab-generate">
+      ⚡ Generate Media
+      <span class="step-badge" id="badge-generate">5</span>
+    </button>
+
+    <div class="divider" style="margin: 12px 0;"></div>
+    <div class="sidebar-label">Config</div>
+    <div style="padding: 8px 10px; display:flex; flex-direction:column; gap:8px;">
+      <div>
+        <label style="display:block;margin-bottom:4px;">API Base URL</label>
+        <input id="baseUrl" value="http://34.133.47.149/v1" style="font-size:11px;" />
+      </div>
+      <div>
+        <label style="display:block;margin-bottom:4px;">API Key</label>
+        <input id="apiKey" value="crafto-dev-api-key-2026" style="font-size:11px;" />
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- STATE BAR (always visible) -->
+    <div class="state-bar" id="stateBar">
+      <div class="state-item">
+        <span class="state-label">JWT Token</span>
+        <span class="state-val unset" id="stateJwt">not set</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Category</span>
+        <span class="state-val unset" id="stateCategory">not set</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Thumbnail Key</span>
+        <span class="state-val unset" id="stateThumb">not set</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Template Key</span>
+        <span class="state-val unset" id="stateTemplateKey">not set</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Template ID</span>
+        <span class="state-val unset" id="stateTemplateId">not set</span>
+      </div>
+      <div class="state-item">
+        <span class="state-label">Media Job ID</span>
+        <span class="state-val unset" id="stateMediaId">not set</span>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ TAB 1: AUTH -->
+    <div class="tab-panel active" id="panel-auth">
+      <div>
+        <div class="page-title">🔐 Authentication</div>
+        <div class="page-subtitle">Step 1 — Log in as admin to get a JWT token for protected endpoints.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ Admin Login</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Admin Email</label>
+            <input id="adminEmail" type="email" placeholder="admin@crafto.in" />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input id="adminPassword" type="password" placeholder="••••••••" />
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="adminLogin()" id="loginBtn">
+          <span>Login as Admin</span>
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📱 User OTP Login (mobile flow)</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input id="phoneNumber" placeholder="+919876543210" />
+          </div>
+          <div class="form-group">
+            <label>OTP (123456 in dev)</label>
+            <input id="otp" placeholder="123456" maxlength="6" />
+          </div>
+        </div>
+        <div class="inline-row">
+          <button class="btn btn-secondary" onclick="requestOtp()">Send OTP</button>
+          <button class="btn btn-primary" onclick="verifyOtp()">Verify OTP &amp; Login</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎫 Active JWT Token</div>
+        <div class="token-display empty" id="tokenDisplay">No token — log in above</div>
+        <div style="margin-top:10px; display:flex; gap:8px;">
+          <button class="btn btn-sm btn-secondary" onclick="copyToken()">📋 Copy</button>
+          <button class="btn btn-sm btn-danger" onclick="clearToken()">🗑 Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📤 Response</div>
+        <div class="response-box empty" id="authResponse">Response will appear here…</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ TAB 2: CATEGORIES -->
+    <div class="tab-panel" id="panel-categories">
+      <div>
+        <div class="page-title">📂 Categories</div>
+        <div class="page-subtitle">Step 2 — List existing categories or create a new one. You need a category UUID for template creation.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 List Categories</div>
+        <button class="btn btn-primary" onclick="listCategories()">Fetch Categories</button>
+        <div id="categoriesList" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">➕ Create Category (admin)</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Category Name</label>
+            <input id="catName" placeholder="e.g. Political" />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input id="catDesc" placeholder="e.g. Political posters and banners" />
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="createCategory()">Create Category</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📤 Response</div>
+        <div class="response-box empty" id="catResponse">Response will appear here…</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ TAB 3: UPLOAD -->
+    <div class="tab-panel" id="panel-upload">
+      <div>
+        <div class="page-title">☁️ Upload Files to S3</div>
+        <div class="page-subtitle">Step 3 — Upload your thumbnail image and background video/image. The S3 keys will be auto-filled for template creation.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🖼️ Thumbnail (image)</div>
+        <label class="upload-zone" id="thumbZone" ondragover="zoneDrag(event,'thumbZone',true)" ondragleave="zoneDrag(event,'thumbZone',false)" ondrop="zoneDrop(event,'thumbInput','thumbZone')">
+          <input type="file" id="thumbInput" accept="image/*" onchange="previewUpload('thumbInput','thumbZone','thumbPreviewName')" />
+          <div class="uz-icon">🖼️</div>
+          <div class="uz-text"><strong>Click or drop</strong> a thumbnail image (JPG, PNG, WebP)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="thumbPreviewName"></div>
+        </label>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="uploadFile('thumbnail','thumbInput','thumb')" id="thumbUploadBtn">
+            ☁️ Upload Thumbnail
+          </button>
+          <span style="margin-left:12px;font-size:12px;color:var(--muted)" id="thumbStatus"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎬 Background Media (video or image)</div>
+        <label class="upload-zone" id="bgZone" ondragover="zoneDrag(event,'bgZone',true)" ondragleave="zoneDrag(event,'bgZone',false)" ondrop="zoneDrop(event,'bgInput','bgZone')">
+          <input type="file" id="bgInput" accept="video/*,image/*" onchange="previewUpload('bgInput','bgZone','bgPreviewName')" />
+          <div class="uz-icon">🎬</div>
+          <div class="uz-text"><strong>Click or drop</strong> a video (.mp4) or image (.jpg/.png)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="bgPreviewName"></div>
+        </label>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="uploadFile('template','bgInput','bg')" id="bgUploadBtn">
+            ☁️ Upload Background
+          </button>
+          <span style="margin-left:12px;font-size:12px;color:var(--muted)" id="bgStatus"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📤 Upload Response</div>
+        <div class="response-box empty" id="uploadResponse">Response will appear here…</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ TAB 4: TEMPLATE -->
+    <div class="tab-panel" id="panel-template">
+      <div>
+        <div class="page-title">🎨 Create Template</div>
+        <div class="page-subtitle">Step 4 — Define the template with its rich config_json. S3 keys are auto-filled from the upload step.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📝 Template Metadata</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Template Name</label>
+            <input id="tplName" placeholder="e.g. Diwali Festival" />
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select id="tplType">
+              <option value="IMAGE">IMAGE</option>
+              <option value="VIDEO">VIDEO</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Category ID</label>
+            <input id="tplCategoryId" placeholder="Paste UUID or select from Step 2" />
+          </div>
+          <div class="form-group">
+            <label>Language</label>
+            <select id="tplLang">
+              <option value="en">English</option>
+              <option value="hi">Hindi</option>
+              <option value="mr">Marathi</option>
+              <option value="ta">Tamil</option>
+              <option value="te">Telugu</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Thumbnail S3 Key <span style="color:var(--success);font-size:10px;">(auto-filled)</span></label>
+            <input id="tplThumbKey" placeholder="thumbnails/..." />
+          </div>
+          <div class="form-group">
+            <label>Template/Background S3 Key <span style="color:var(--success);font-size:10px;">(auto-filled)</span></label>
+            <input id="tplBgKey" placeholder="templates/..." />
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="tplIsPremium" style="width:auto;" />
+            Premium template (requires subscription to generate)
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ config_json — Rich Template Config</div>
+        <div class="editor-header">
+          <span style="font-size:12px;color:var(--muted);">Defines layout, positions, and defaults</span>
+          <div class="editor-tabs">
+            <button class="editor-tab active" onclick="loadPreset('diwali-image')">🪔 Diwali Image</button>
+            <button class="editor-tab" onclick="loadPreset('diwali-video')">🎬 Diwali Video</button>
+            <button class="editor-tab" onclick="loadPreset('minimal')">📄 Minimal</button>
+          </div>
+        </div>
+        <textarea id="tplConfigJson" rows="18"></textarea>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted);">
+          💡 Use <code style="color:var(--accent);">{{name}}</code>, <code style="color:var(--accent);">{{message}}</code> as placeholders — resolved from <code>user_data</code> at generation time.
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="createTemplate()" id="createTplBtn">🎨 Create Template</button>
+        <button class="btn btn-secondary" onclick="listTemplates()">📋 List My Templates</button>
+      </div>
+
+      <div id="templatesList" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+
+      <div class="card">
+        <div class="card-title">📤 Response</div>
+        <div class="response-box empty" id="tplResponse">Response will appear here…</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ TAB 5: GENERATE -->
+    <div class="tab-panel" id="panel-generate">
+      <div>
+        <div class="page-title">⚡ Generate Media</div>
+        <div class="page-subtitle">Step 5 — Submit a generation job and poll for the result.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🧾 Job Config</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Template ID <span style="color:var(--success);font-size:10px;">(auto-filled)</span></label>
+            <input id="genTemplateId" placeholder="UUID from Step 4" />
+          </div>
+          <div class="form-group">
+            <label>Media Type</label>
+            <select id="genType">
+              <option value="IMAGE">IMAGE</option>
+              <option value="VIDEO">VIDEO (premium only)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">👤 User Content</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Name</label>
+            <input id="genName" value="Rahul Sharma" />
+          </div>
+          <div class="form-group">
+            <label>Message</label>
+            <input id="genMessage" value="Wishing everyone a prosperous Diwali!" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Photo URL (HTTPS only — no file:// URIs)</label>
+            <input id="genPhotoUrl" placeholder="https://your-cdn.com/photo.jpg" />
+          </div>
+          <div class="form-group">
+            <label>Organization</label>
+            <input id="genOrg" value="Sharma Enterprises" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Mobile</label>
+            <input id="genMobile" value="+91-9876543210" />
+          </div>
+          <div class="form-group">
+            <label>Address</label>
+            <input id="genAddress" value="123 MG Road, Bangalore" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎞️ Animation &amp; Output</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Photo Frame Animation</label>
+            <select id="genAnimation">
+              <option value="fade_up">Fade Up</option>
+              <option value="slide_top_right">Slide Top Right</option>
+              <option value="pop_in">Pop In</option>
+              <option value="rotate_soft_left">Rotate Left</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Photo Frame Shape</label>
+            <select id="genShape">
+              <option value="circle">Circle</option>
+              <option value="rect">Rectangle</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Quality</label>
+            <select id="genQuality">
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Video Duration (seconds)</label>
+            <input type="number" id="genDuration" value="10" min="3" max="60" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Stickers (emoji picker)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;" id="stickerPicker">
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('🪔')">🪔</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('✨')">✨</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('🎆')">🎆</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('🌸')">🌸</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('🎊')">🎊</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('⭐')">⭐</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('🔥')">🔥</button>
+            <button class="btn btn-sm btn-secondary" onclick="addSticker('💫')">💫</button>
+            <button class="btn btn-sm btn-danger" onclick="clearStickers()">✕ Clear</button>
+          </div>
+          <div id="stickerList" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="generateMedia()" id="genBtn">⚡ Generate Media</button>
+        <button class="btn btn-secondary" onclick="listMyMedia()">📋 My Generated Media</button>
+      </div>
+
+      <!-- Poll status -->
+      <div class="poll-status" id="pollStatus" style="display:none;">
+        <div class="spinner"></div>
+        <div style="flex:1;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px;" id="pollLabel">Processing…</div>
+          <div class="poll-progress"><div class="poll-progress-bar" id="pollBar"></div></div>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="stopPolling()">Stop</button>
+      </div>
+
+      <!-- Result -->
+      <div id="genResult" style="display:none;">
+        <div class="card">
+          <div class="card-title">✅ Generated Result</div>
+          <div id="genResultContent"></div>
+        </div>
+      </div>
+
+      <!-- Media grid -->
+      <div id="mediaGrid" style="display:none;">
+        <div class="card">
+          <div class="card-title">📁 My Media Jobs</div>
+          <div class="media-cards-grid" id="mediaCardsGrid"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📤 Response</div>
+        <div class="response-box empty" id="genResponse">Response will appear here…</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+const state = {
+  jwt: localStorage.getItem('crafto_jwt') || '',
+  categoryId: '',
+  thumbnailKey: '',
+  templateKey: '',
+  templateId: '',
+  mediaId: '',
+  stickers: [],
+  pollInterval: null,
+};
+
+// Restore token
+if (state.jwt) {
+  updateTokenDisplay(state.jwt);
+  updateStateBar();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════
+const baseUrl = () => document.getElementById('baseUrl').value.replace(/\/$/, '');
+const apiKey  = () => document.getElementById('apiKey').value;
+
+async function api(method, path, body, useAuth = true, extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+  if (apiKey()) headers['x-api-key'] = apiKey();
+  if (useAuth && state.jwt) headers['Authorization'] = `Bearer ${state.jwt}`;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${baseUrl()}${path}`, opts);
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { ok: res.ok, status: res.status, data: json };
+}
+
+function showResponse(elId, res) {
+  const el = document.getElementById(elId);
+  el.classList.remove('empty', 'error');
+  if (!res.ok) el.classList.add('error');
+  el.textContent = JSON.stringify(res.data, null, 2);
+}
+
+function toast(msg, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function setLoading(btnId, loading, label = '') {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<div class="spinner"></div>${label || 'Loading…'}`
+    : btn.dataset.label || btn.innerHTML;
+  if (!loading && label) btn.dataset.label = btn.innerHTML;
+}
+
+function updateStateBar() {
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (val) { el.textContent = val; el.className = 'state-val set'; }
+    else      { el.textContent = 'not set'; el.className = 'state-val unset'; }
+  };
+  set('stateJwt', state.jwt ? state.jwt.substring(0, 20) + '…' : '');
+  set('stateCategory', state.categoryId);
+  set('stateThumb', state.thumbnailKey);
+  set('stateTemplateKey', state.templateKey);
+  set('stateTemplateId', state.templateId);
+  set('stateMediaId', state.mediaId);
+}
+
+function markTabDone(tab) {
+  const btn = document.getElementById(`tab-${tab}`);
+  btn.classList.add('done');
+  const badge = document.getElementById(`badge-${tab}`);
+  badge.textContent = '✓';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById(`panel-${tab}`).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SERVER STATUS CHECK
+// ═══════════════════════════════════════════════════════════════════
+async function checkServer() {
+  try {
+    const res = await fetch(`${baseUrl().replace('/v1', '')}/api-docs`);
+    const ok = res.ok || res.status === 200 || res.status === 301;
+    document.getElementById('statusDot').className = 'status-dot ' + (ok ? 'online' : 'offline');
+    document.getElementById('statusText').textContent = ok ? 'Server online' : 'Server unreachable';
+  } catch {
+    document.getElementById('statusDot').className = 'status-dot offline';
+    document.getElementById('statusText').textContent = 'Server offline';
+  }
+}
+checkServer();
+setInterval(checkServer, 10000);
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 1 — AUTH
+// ═══════════════════════════════════════════════════════════════════
+async function adminLogin() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const pass  = document.getElementById('adminPassword').value;
+  if (!email || !pass) { toast('Enter email and password', 'error'); return; }
+  setLoading('loginBtn', true, 'Logging in…');
+  try {
+    const res = await api('POST', '/auth/admin/login', { email, password: pass }, false);
+    showResponse('authResponse', res);
+    if (res.ok && res.data?.data?.access_token) {
+      state.jwt = res.data.data.access_token;
+      localStorage.setItem('crafto_jwt', state.jwt);
+      updateTokenDisplay(state.jwt);
+      updateStateBar();
+      markTabDone('auth');
+      toast('Admin logged in!', 'success');
+    } else {
+      toast(res.data?.message || 'Login failed', 'error');
+    }
+  } finally { setLoading('loginBtn', false, 'Login as Admin'); document.getElementById('loginBtn').innerHTML = 'Login as Admin'; document.getElementById('loginBtn').disabled = false; }
+}
+
+async function requestOtp() {
+  const phone = document.getElementById('phoneNumber').value.trim();
+  if (!phone) { toast('Enter phone number', 'error'); return; }
+  const res = await api('POST', '/auth/request-otp', { phone_number: phone }, false);
+  showResponse('authResponse', res);
+  toast(res.ok ? 'OTP sent!' : 'Failed to send OTP', res.ok ? 'success' : 'error');
+}
+
+async function verifyOtp() {
+  const phone = document.getElementById('phoneNumber').value.trim();
+  const otp   = document.getElementById('otp').value.trim();
+  if (!phone || !otp) { toast('Enter phone and OTP', 'error'); return; }
+  const res = await api('POST', '/auth/verify-otp', { phone_number: phone, otp }, false);
+  showResponse('authResponse', res);
+  if (res.ok && res.data?.data?.access_token) {
+    state.jwt = res.data.data.access_token;
+    localStorage.setItem('crafto_jwt', state.jwt);
+    updateTokenDisplay(state.jwt);
+    updateStateBar();
+    markTabDone('auth');
+    toast('Logged in!', 'success');
+  } else {
+    toast(res.data?.message || 'OTP verify failed', 'error');
+  }
+}
+
+function updateTokenDisplay(token) {
+  const el = document.getElementById('tokenDisplay');
+  el.textContent = token;
+  el.className = 'token-display';
+}
+
+function copyToken() {
+  if (!state.jwt) { toast('No token', 'warning'); return; }
+  navigator.clipboard.writeText(state.jwt);
+  toast('Token copied!', 'success');
+}
+
+function clearToken() {
+  state.jwt = '';
+  localStorage.removeItem('crafto_jwt');
+  const el = document.getElementById('tokenDisplay');
+  el.textContent = 'No token — log in above';
+  el.className = 'token-display empty';
+  updateStateBar();
+  toast('Token cleared', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 2 — CATEGORIES
+// ═══════════════════════════════════════════════════════════════════
+async function listCategories() {
+  if (!state.jwt) { toast('Log in first', 'warning'); return; }
+  const res = await api('GET', '/categories');
+  showResponse('catResponse', res);
+  const list = document.getElementById('categoriesList');
+  list.innerHTML = '';
+  const cats = res.data?.data?.data || res.data?.data || [];
+  cats.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.innerHTML = `📂 ${cat.name}`;
+    btn.onclick = () => {
+      state.categoryId = cat.id;
+      document.getElementById('tplCategoryId').value = cat.id;
+      updateStateBar();
+      markTabDone('categories');
+      // highlight selected
+      list.querySelectorAll('button').forEach(b => b.classList.remove('btn-primary'));
+      btn.classList.add('btn-primary');
+      toast(`Category selected: ${cat.name}`, 'success');
+    };
+    list.appendChild(btn);
+  });
+  if (!cats.length) list.innerHTML = '<span style="color:var(--muted);font-size:12px;">No categories found — create one below</span>';
+}
+
+async function createCategory() {
+  if (!state.jwt) { toast('Log in first', 'warning'); return; }
+  const name = document.getElementById('catName').value.trim();
+  const desc = document.getElementById('catDesc').value.trim();
+  if (!name) { toast('Category name required', 'error'); return; }
+  const res = await api('POST', '/categories/admin', { name, description: desc });
+  showResponse('catResponse', res);
+  if (res.ok) {
+    state.categoryId = res.data?.data?.id || '';
+    document.getElementById('tplCategoryId').value = state.categoryId;
+    updateStateBar();
+    markTabDone('categories');
+    toast(`Category "${name}" created!`, 'success');
+    listCategories();
+  } else {
+    toast(res.data?.message || 'Failed', 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 3 — UPLOAD
+// ═══════════════════════════════════════════════════════════════════
+function zoneDrag(e, zoneId, active) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.toggle('drag', active);
+}
+
+function zoneDrop(e, inputId, zoneId) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.remove('drag');
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  const inp = document.getElementById(inputId);
+  // simulate file input change
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  inp.files = dt.files;
+  inp.dispatchEvent(new Event('change'));
+}
+
+function previewUpload(inputId, zoneId, nameId) {
+  const file = document.getElementById(inputId).files[0];
+  if (!file) return;
+  document.getElementById(zoneId).classList.add('has-file');
+  document.getElementById(nameId).textContent = `📎 ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+}
+
+async function uploadFile(category, inputId, prefix) {
+  if (!state.jwt) { toast('Log in first', 'warning'); return; }
+  const file = document.getElementById(inputId).files[0];
+  if (!file) { toast('Select a file first', 'error'); return; }
+
+  const statusEl = document.getElementById(`${prefix}Status`);
+  const btnId = `${prefix}UploadBtn`;
+  setLoading(btnId, true, 'Getting presigned URL…');
+  statusEl.textContent = 'Getting presigned URL…';
+
+  try {
+    // 1. Get presigned URL
+    const presRes = await api('POST', '/s3/presigned-url', {
+      fileName: file.name,
+      category,
+      contentType: file.type || 'application/octet-stream',
+    });
+    showResponse('uploadResponse', presRes);
+    if (!presRes.ok) { toast('Presigned URL failed', 'error'); return; }
+
+    const { presignedUrl, fileKey } = presRes.data?.data || presRes.data || {};
+    statusEl.textContent = 'Uploading to S3…';
+    setLoading(btnId, true, 'Uploading…');
+
+    // 2. PUT to S3
+    const s3Res = await fetch(presignedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+
+    if (!s3Res.ok) throw new Error(`S3 upload failed: ${s3Res.status}`);
+
+    // 3. Save key
+    if (prefix === 'thumb') {
+      state.thumbnailKey = fileKey;
+      document.getElementById('tplThumbKey').value = fileKey;
+    } else {
+      state.templateKey = fileKey;
+      document.getElementById('tplBgKey').value = fileKey;
+    }
+    updateStateBar();
+    markTabDone('upload');
+    statusEl.textContent = `✅ ${fileKey}`;
+    toast(`${prefix === 'thumb' ? 'Thumbnail' : 'Background'} uploaded!`, 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+    statusEl.textContent = '❌ ' + err.message;
+  } finally {
+    document.getElementById(btnId).disabled = false;
+    document.getElementById(btnId).innerHTML = prefix === 'thumb' ? '☁️ Upload Thumbnail' : '☁️ Upload Background';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 4 — TEMPLATE
+// ═══════════════════════════════════════════════════════════════════
+const PRESETS = {
+  'diwali-image': {
+    "width": 1080,
+    "height": 1920,
+    "background": "#DDE5EC",
+    "template": {
+      "canvas": { "width": 1080, "height": 1920 },
+      "accentColor": "#0D62DF",
+      "backgroundColor": "#DDE5EC"
+    },
+    "photoFrame": {
+      "x": 140, "y": 200,
+      "width": 800, "height": 800,
+      "borderRadius": 0,
+      "borderColor": "#FFFFFF",
+      "borderWidth": 3,
+      "shape": "circle"
+    },
+    "textFields": {
+      "name": {
+        "visible": true,
+        "content": "{{name}}",
+        "position": { "x": 60, "y": 1100 },
+        "userOffset": { "x": 0, "y": 0 },
+        "userScale": 1.0,
+        "width": 960, "fontSize": 64,
+        "fontFamily": "Poppins", "fontWeight": "bold",
+        "color": "#FFFFFF", "align": "center",
+        "bold": true, "italic": false, "shadow": false
+      },
+      "message": {
+        "visible": true,
+        "content": "{{message}}",
+        "position": { "x": 60, "y": 1200 },
+        "userOffset": { "x": 0, "y": 0 },
+        "userScale": 1.0,
+        "width": 960, "fontSize": 36,
+        "fontFamily": "Inter", "fontWeight": "normal",
+        "color": "#EEEEEE", "align": "center",
+        "bold": false, "italic": false, "shadow": false
+      }
+    },
+    "backgroundOverlay": { "enabled": true, "color": "rgba(0, 0, 0, 0.3)", "opacity": 0.3 },
+    "premiumBands": {
+      "topBandHeight": 70, "bottomBandHeight": 85,
+      "showTopBand": true, "showBottomBand": true,
+      "topBand": { "title": "{{name}}", "subtitle": "{{organization}}" },
+      "bottomBand": {
+        "contactFields": [
+          { "type": "mobile", "label": "Mobile", "value": "{{mobile}}", "icon": "phone" },
+          { "type": "address", "label": "Address", "value": "{{address}}", "icon": "map-marker" }
+        ],
+        "socialHandles": []
+      }
+    },
+    "output": { "format": "JPEG", "quality": "high", "width": 1080, "height": 1920 },
+    "variables": [
+      { "key": "name", "label": "Your Name", "type": "text", "default": "Your Name" },
+      { "key": "message", "label": "Message", "type": "text", "default": "Happy Diwali!" },
+      { "key": "mobile", "label": "Mobile", "type": "text", "default": "" },
+      { "key": "address", "label": "Address", "type": "text", "default": "" },
+      { "key": "organization", "label": "Organization", "type": "text", "default": "" }
+    ]
+  },
+  'diwali-video': {
+    "width": 1080, "height": 1920,
+    "template": { "canvas": { "width": 1080, "height": 1920 }, "accentColor": "#0D62DF" },
+    "photoFrame": {
+      "x": 140, "y": 200,
+      "width": 800, "height": 800,
+      "borderColor": "#FFFFFF", "borderWidth": 3, "shape": "circle",
+      "animation": { "id": "fade_up", "config": {} }
+    },
+    "textFields": {
+      "name": {
+        "visible": true, "content": "{{name}}",
+        "position": { "x": 60, "y": 1100 }, "userOffset": { "x": 0, "y": 0 }, "userScale": 1.0,
+        "width": 960, "fontSize": 64, "fontFamily": "Poppins", "fontWeight": "bold",
+        "color": "#FFFFFF", "align": "center", "bold": true, "italic": false, "shadow": false
+      },
+      "message": {
+        "visible": true, "content": "{{message}}",
+        "position": { "x": 60, "y": 1200 }, "userOffset": { "x": 0, "y": 0 }, "userScale": 1.0,
+        "width": 960, "fontSize": 36, "fontFamily": "Inter", "fontWeight": "normal",
+        "color": "#EEEEEE", "align": "center", "bold": false, "italic": false, "shadow": false
+      }
+    },
+    "backgroundOverlay": { "enabled": true, "color": "rgba(0, 0, 0, 0.3)", "opacity": 0.3 },
+    "animation": [
+      { "id": "fade_up", "from": { "translateY": 346, "opacity": 0.2 }, "to": { "translateY": 0, "opacity": 1 }, "loop": false, "duration": 1400, "easing": "ease" },
+      { "id": "pop_in", "from": { "scale": 0.55, "opacity": 0.25 }, "to": { "scale": 1, "opacity": 1 }, "loop": false, "duration": 1400, "easing": "ease" }
+    ],
+    "output": { "format": "MP4", "quality": "high", "width": 1080, "height": 1920, "fps": 30, "duration": 10 },
+    "variables": [
+      { "key": "name", "label": "Your Name", "type": "text", "default": "Your Name" },
+      { "key": "message", "label": "Message", "type": "text", "default": "Happy Diwali!" }
+    ]
+  },
+  'minimal': {
+    "width": 1080, "height": 1920,
+    "background": "#ffffff",
+    "layers": [
+      { "id": "headline", "type": "text", "x": 60, "y": 900, "width": 960, "text": "{{headline}}", "fontSize": 72, "fontFamily": "Poppins", "fontWeight": "bold", "color": "#111827", "align": "center" },
+      { "id": "subtext", "type": "text", "x": 60, "y": 1020, "width": 960, "text": "{{subtext}}", "fontSize": 36, "fontFamily": "Inter", "color": "#64748b", "align": "center" }
+    ],
+    "variables": [
+      { "key": "headline", "label": "Headline", "type": "text", "default": "Hello World" },
+      { "key": "subtext", "label": "Subtext", "type": "text", "default": "Your message here" }
+    ]
+  }
+};
+
+function loadPreset(name) {
+  document.getElementById('tplConfigJson').value = JSON.stringify(PRESETS[name], null, 2);
+  document.querySelectorAll('.editor-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['diwali-image','diwali-video','minimal'][i] === name);
+  });
+  // Auto-set type
+  if (name === 'diwali-video') document.getElementById('tplType').value = 'VIDEO';
+  else document.getElementById('tplType').value = 'IMAGE';
+}
+loadPreset('diwali-image');
+
+async function createTemplate() {
+  if (!state.jwt) { toast('Log in first', 'warning'); return; }
+  const name = document.getElementById('tplName').value.trim();
+  const type = document.getElementById('tplType').value;
+  const catId = document.getElementById('tplCategoryId').value.trim();
+  const thumbKey = document.getElementById('tplThumbKey').value.trim();
+  const bgKey = document.getElementById('tplBgKey').value.trim();
+  const lang = document.getElementById('tplLang').value;
+  const isPremium = document.getElementById('tplIsPremium').checked;
+  const configRaw = document.getElementById('tplConfigJson').value.trim();
+
+  if (!name) { toast('Template name required', 'error'); return; }
+  if (!catId) { toast('Category ID required (Step 2)', 'error'); return; }
+  if (!thumbKey) { toast('Thumbnail key required (Step 3)', 'error'); return; }
+  if (!bgKey) { toast('Background key required (Step 3)', 'error'); return; }
+
+  let configJson;
+  try { configJson = JSON.parse(configRaw); }
+  catch { toast('config_json is not valid JSON', 'error'); return; }
+
+  setLoading('createTplBtn', true, 'Creating…');
+  try {
+    const res = await api('POST', '/templates/admin', {
+      name, type, category_id: catId,
+      thumbnail_key: thumbKey, template_key: bgKey,
+      language: lang, is_premium: isPremium,
+      config_json: configJson,
+    });
+    showResponse('tplResponse', res);
+    if (res.ok) {
+      state.templateId = res.data?.data?.id || '';
+      document.getElementById('genTemplateId').value = state.templateId;
+      updateStateBar();
+      markTabDone('template');
+      toast(`Template "${name}" created! ID: ${state.templateId.substring(0,8)}…`, 'success');
+    } else {
+      toast(res.data?.message || 'Failed', 'error');
+    }
+  } finally {
+    document.getElementById('createTplBtn').disabled = false;
+    document.getElementById('createTplBtn').innerHTML = '🎨 Create Template';
+  }
+}
+
+async function listTemplates() {
+  const res = await api('GET', '/templates?limit=20');
+  showResponse('tplResponse', res);
+  const list = document.getElementById('templatesList');
+  list.innerHTML = '';
+  const templates = res.data?.data?.data || [];
+  templates.forEach(t => {
+    const el = document.createElement('button');
+    el.className = 'btn btn-secondary btn-sm';
+    el.innerHTML = `🎨 ${t.name} <span class="tag">${t.type}</span>`;
+    el.onclick = () => {
+      state.templateId = t.id;
+      document.getElementById('genTemplateId').value = t.id;
+      updateStateBar();
+      markTabDone('template');
+      toast(`Template selected: ${t.name}`, 'success');
+    };
+    list.appendChild(el);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB 5 — GENERATE
+// ═══════════════════════════════════════════════════════════════════
+function addSticker(emoji) {
+  const id = `s_${Date.now()}`;
+  state.stickers.push({ id, emoji, x: 100 + Math.random()*800, y: 100 + Math.random()*1700, scale: 0.8 + Math.random()*0.6 });
+  renderStickerList();
+}
+
+function clearStickers() { state.stickers = []; renderStickerList(); }
+
+function renderStickerList() {
+  document.getElementById('stickerList').textContent =
+    state.stickers.length ? `Selected: ${state.stickers.map(s => s.emoji).join(' ')}` : 'No stickers';
+}
+
+async function generateMedia() {
+  if (!state.jwt) { toast('Log in first', 'warning'); return; }
+  const templateId = document.getElementById('genTemplateId').value.trim();
+  if (!templateId) { toast('Set Template ID (Step 4)', 'error'); return; }
+
+  const type     = document.getElementById('genType').value.replace(' (premium only)', '');
+  const name     = document.getElementById('genName').value.trim();
+  const message  = document.getElementById('genMessage').value.trim();
+  const photo    = document.getElementById('genPhotoUrl').value.trim();
+  const org      = document.getElementById('genOrg').value.trim();
+  const mobile   = document.getElementById('genMobile').value.trim();
+  const address  = document.getElementById('genAddress').value.trim();
+  const animId   = document.getElementById('genAnimation').value;
+  const shape    = document.getElementById('genShape').value;
+  const quality  = document.getElementById('genQuality').value;
+  const duration = parseInt(document.getElementById('genDuration').value) || 10;
+
+  const renderConfig = {
+    template: { canvas: { width: 1080, height: 1920 }, accentColor: '#0D62DF', backgroundColor: '#DDE5EC' },
+    media: photo ? { frameOverlaySource: '' } : {},
+    userContent: { photo: photo || undefined, name, message, isPremium: true },
+    photoFrame: { x: 140, y: 200, width: 800, height: 800, borderColor: '#FFFFFF', borderWidth: 3, shape, animation: { id: animId, config: {} } },
+    textFields: {
+      name: { visible: true, content: name, position: { x: 60, y: 1100 }, userOffset: { x: 0, y: 0 }, userScale: 1.05, width: 960, fontSize: 64, fontFamily: 'Poppins', fontWeight: 'bold', color: '#FFFFFF', align: 'center', bold: true, italic: false, shadow: false },
+      message: { visible: true, content: message, position: { x: 60, y: 1200 }, userOffset: { x: 0, y: 0 }, userScale: 1.0, width: 960, fontSize: 36, fontFamily: 'Inter', fontWeight: 'normal', color: '#EEEEEE', align: 'center', bold: false, italic: false, shadow: false }
+    },
+    backgroundOverlay: { enabled: true, color: 'rgba(0, 0, 0, 0.3)', opacity: 0.3 },
+    stickers: state.stickers,
+    premiumBands: {
+      topBandHeight: 70, bottomBandHeight: 85, showTopBand: true, showBottomBand: true,
+      topBand: { title: name, subtitle: org },
+      bottomBand: {
+        contactFields: [
+          { type: 'mobile', label: 'Mobile', value: mobile, icon: 'phone' },
+          { type: 'address', label: 'Address', value: address, icon: 'map-marker' },
+        ],
+        socialHandles: []
+      }
+    },
+    animation: [
+      { id: 'fade_up', from: { translateY: 346, opacity: 0.2 }, to: { translateY: 0, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
+      { id: 'slide_top_right', from: { translateX: 756, translateY: -1344 }, to: { translateX: 0, translateY: 0 }, loop: false, duration: 1400, easing: 'ease' },
+      { id: 'pop_in', from: { scale: 0.55, opacity: 0.25 }, to: { scale: 1, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
+      { id: 'rotate_soft_left', from: { rotate: '-12deg', scale: 0.95 }, to: { rotate: '0deg', scale: 1 }, loop: false, duration: 1400, easing: 'ease' }
+    ],
+    output: { format: type === 'VIDEO' ? 'MP4' : 'JPEG', quality, width: 1080, height: 1920, fps: 30, duration, includeAnimation: true }
+  };
+
+  const endpoint = type === 'VIDEO' ? '/generate/video' : '/generate/image';
+  setLoading('genBtn', true, 'Queuing job…');
+  document.getElementById('genResult').style.display = 'none';
+
+  try {
+    const res = await api('POST', endpoint, {
+      template_id: templateId,
+      type,
+      user_data: { name, message, mobile, address, organization: org },
+      render_config: renderConfig,
+    });
+    showResponse('genResponse', res);
+    if (res.ok) {
+      state.mediaId = res.data?.data?.id || '';
+      updateStateBar();
+      markTabDone('generate');
+      toast(`Job queued! ID: ${state.mediaId.substring(0,8)}…`, 'success');
+      startPolling(state.mediaId);
+    } else {
+      toast(res.data?.message || 'Generation failed', 'error');
+    }
+  } finally {
+    document.getElementById('genBtn').disabled = false;
+    document.getElementById('genBtn').innerHTML = '⚡ Generate Media';
+  }
+}
+
+function startPolling(mediaId) {
+  document.getElementById('pollStatus').style.display = 'flex';
+  document.getElementById('pollLabel').textContent = 'Waiting for server to start processing…';
+  let ticks = 0;
+  const POLL_INTERVAL = 3000;
+
+  state.pollInterval = setInterval(async () => {
+    ticks++;
+    const progress = Math.min(ticks * 5, 95);
+    document.getElementById('pollBar').style.width = progress + '%';
+
+    const res = await api('GET', `/media/${mediaId}`);
+    const status = res.data?.data?.status || 'UNKNOWN';
+    document.getElementById('pollLabel').textContent = `Status: ${status} (${ticks * 3}s elapsed)`;
+    showResponse('genResponse', res);
+
+    if (status === 'COMPLETED') {
+      stopPolling();
+      document.getElementById('pollBar').style.width = '100%';
+      showGeneratedResult(res.data?.data);
+      toast('Media generated! 🎉', 'success');
+    } else if (status === 'FAILED') {
+      stopPolling();
+      showGeneratedResult(res.data?.data);
+      toast('Generation failed: ' + (res.data?.data?.error_msg || 'Unknown'), 'error');
+    }
+  }, POLL_INTERVAL);
+}
+
+function stopPolling() {
+  if (state.pollInterval) { clearInterval(state.pollInterval); state.pollInterval = null; }
+  document.getElementById('pollStatus').style.display = 'none';
+}
+
+function showGeneratedResult(media) {
+  if (!media) return;
+  const el = document.getElementById('genResultContent');
+  const isVideo = media.type === 'VIDEO';
+  const url = media.media_url;
+  const canRetry = media.status === 'FAILED';
+
+  el.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      ${url ? (isVideo
+        ? `<video controls style="max-width:280px;border-radius:8px;border:1px solid var(--border);" src="${url}"></video>`
+        : `<img src="${url}" style="max-width:220px;border-radius:8px;border:1px solid var(--border);" alt="Generated" onerror="this.style.display='none'" />`
+      ) : '<div style="width:180px;height:220px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">No preview</div>'}
+      <div style="flex:1;min-width:200px;">
+        <div style="margin-bottom:10px;">
+          <span class="pill pill-${(media.status||'').toLowerCase()}">${media.status}</span>
+        </div>
+        <table style="font-size:12px;border-collapse:collapse;width:100%;">
+          <tr><td style="color:var(--muted);padding:4px 12px 4px 0;white-space:nowrap;">Job ID</td><td style="font-family:var(--mono);">${media.id}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 12px 4px 0;">Type</td><td>${media.type}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 12px 4px 0;">Watermark</td><td>${media.has_watermark ? '✅ Yes (free)' : '🚫 No (premium)'}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 12px 4px 0;">Created</td><td>${new Date(media.createdAt).toLocaleString()}</td></tr>
+          ${url ? `<tr><td style="color:var(--muted);padding:4px 12px 4px 0;">URL</td><td><a href="${url}" target="_blank" style="color:var(--accent);word-break:break-all;">${url}</a></td></tr>` : ''}
+        </table>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          ${url ? `<a href="${url}" download class="btn btn-success btn-sm">⬇️ Download</a>` : ''}
+          ${canRetry ? `<button class="btn btn-sm btn-primary" onclick="retryMediaJob('${media.id}')">🔄 Retry</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('genResult').style.display = 'block';
+}
+
+async function listMyMedia() {
+  if (!state.jwt) { toast('Log in first', 'warning'); return; }
+  const res = await api('GET', '/media?limit=12');
+  showResponse('genResponse', res);
+  const jobs = res.data?.data?.data || [];
+  const grid = document.getElementById('mediaCardsGrid');
+  grid.innerHTML = '';
+
+  if (!jobs.length) {
+    grid.innerHTML = '<span style="color:var(--muted);font-size:12px;">No media jobs yet</span>';
+  } else {
+    jobs.forEach(job => {
+      const card = document.createElement('div');
+      card.className = 'media-card';
+      const statusClass = (job.status || '').toLowerCase();
+      card.innerHTML = `
+        ${job.media_url
+          ? (job.type === 'VIDEO'
+            ? `<video class="media-preview" src="${job.media_url}" muted></video>`
+            : `<img class="media-preview" src="${job.media_url}" alt="" onerror="this.style.background='var(--surface2)'" />`)
+          : `<div class="media-preview" style="display:flex;align-items:center;justify-content:center;font-size:28px;">${job.type === 'VIDEO' ? '🎬' : '🖼️'}</div>`
+        }
+        <div class="media-info">
+          <div class="media-name">${job.type} · <span class="pill pill-${statusClass}">${job.status}</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">${new Date(job.createdAt).toLocaleDateString()}</div>
+          ${job.media_url ? `<a href="${job.media_url}" target="_blank" class="btn btn-sm btn-success" style="margin-top:8px;">⬇️ Download</a>` : ''}
+          ${job.status === 'FAILED' ? `<button class="btn btn-sm btn-primary" style="margin-top:8px;" onclick="retryMediaJob('${job.id}')">🔄 Retry</button>` : ''}
+          <button class="btn btn-sm btn-secondary" style="margin-top:8px;" onclick="pollSingle('${job.id}')">🔄 Refresh</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+  document.getElementById('mediaGrid').style.display = 'block';
+}
+
+async function retryMediaJob(id) {
+  const res = await api('POST', `/media/${id}/retry`);
+  showResponse('genResponse', res);
+
+  if (!res.ok) {
+    toast(res.data?.message || 'Retry failed', 'error');
+    return;
+  }
+
+  const job = res.data?.data;
+  state.mediaId = job?.id || id;
+  updateStateBar();
+  toast('Retry queued', 'success');
+  startPolling(state.mediaId);
+}
+
+async function pollSingle(id) {
+  const res = await api('GET', `/media/${id}`);
+  showResponse('genResponse', res);
+  showGeneratedResult(res.data?.data);
+  toast('Status refreshed', 'info');
+}
+</script>
+</body>
+</html>

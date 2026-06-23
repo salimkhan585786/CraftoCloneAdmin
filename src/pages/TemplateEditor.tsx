@@ -594,7 +594,7 @@ export default function TemplateEditor() {
     nextThumbnailKey = thumbnailKey,
     nextBackgroundPreview = mediaPreviewUrl,
   ): TemplatePayload => {
-    const nextConfig = { ...(existingConfigJson ?? {}) };
+    const nextConfig: Record<string, unknown> = { ...(existingConfigJson ?? {}) };
 
     nextConfig.width = TEMPLATE_CANVAS_WIDTH;
     nextConfig.height = TEMPLATE_CANVAS_HEIGHT;
@@ -603,8 +603,91 @@ export default function TemplateEditor() {
       nextConfig.background_preview = nextBackgroundPreview;
     }
 
-    nextConfig.photo_frame = frame;
+    nextConfig.photoFrame = {
+      x: frame.x,
+      y: frame.y,
+      width: frame.width,
+      height: frame.height,
+      borderRadius: frame.shape === 'circle' ? (frame.radius ?? frame.width / 2) : 0,
+      borderColor: '#FFFFFF',
+      borderWidth: 3,
+      shape: frame.shape,
+    };
+    delete nextConfig.photo_frame;
     delete nextConfig.background_crop;
+
+    if (!nextConfig.template) {
+      nextConfig.template = {
+        canvas: { width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT },
+        accentColor: '#0D62DF',
+        backgroundColor: '#DDE5EC',
+      };
+    }
+
+    if (!nextConfig.textFields) {
+      nextConfig.textFields = {
+        name: {
+          visible: true,
+          content: '{{name}}',
+          position: { x: 60, y: 1100 },
+          userOffset: { x: 0, y: 0 },
+          userScale: 1.0,
+          width: 960,
+          fontSize: 64,
+          fontFamily: 'Poppins',
+          fontWeight: 'bold',
+          color: '#FFFFFF',
+          align: 'center',
+          bold: true,
+          italic: false,
+          shadow: false,
+        },
+        message: {
+          visible: true,
+          content: '{{message}}',
+          position: { x: 60, y: 1200 },
+          userOffset: { x: 0, y: 0 },
+          userScale: 1.0,
+          width: 960,
+          fontSize: 36,
+          fontFamily: 'Inter',
+          fontWeight: 'normal',
+          color: '#EEEEEE',
+          align: 'center',
+          bold: false,
+          italic: false,
+          shadow: false,
+        },
+      };
+    }
+
+    if (!nextConfig.backgroundOverlay) {
+      nextConfig.backgroundOverlay = { enabled: true, color: 'rgba(0, 0, 0, 0.3)', opacity: 0.3 };
+    }
+
+    if (!nextConfig.output) {
+      nextConfig.output = {
+        format: templateType === 'VIDEO' ? 'MP4' : 'JPEG',
+        quality: 'high',
+        width: TEMPLATE_CANVAS_WIDTH,
+        height: TEMPLATE_CANVAS_HEIGHT,
+        ...(templateType === 'VIDEO' ? { fps: 30, duration: 10 } : {}),
+      };
+    }
+
+    if (!nextConfig.variables) {
+      nextConfig.variables = [
+        { key: 'name', label: 'Your Name', type: 'text', default: 'Your Name' },
+        { key: 'message', label: 'Message', type: 'text', default: 'Happy Diwali!' },
+      ];
+    }
+
+    if (templateType === 'VIDEO' && !nextConfig.animation) {
+      nextConfig.animation = [
+        { id: 'fade_up', from: { translateY: 346, opacity: 0.2 }, to: { translateY: 0, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
+        { id: 'pop_in', from: { scale: 0.55, opacity: 0.25 }, to: { scale: 1, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
+      ];
+    }
 
     return {
       name: templateName,
