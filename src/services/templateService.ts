@@ -93,18 +93,10 @@ async function updateTemplate(id: string, payload: TemplatePayload) {
 
 async function setTemplateActive(id: string, isActive: boolean) {
   try {
-    const template = await getTemplate(id);
-    const response = await API.put<ApiEnvelope<AdminTemplate>>(`/v1/templates/admin/${id}`, {
-      name: template.name,
-      type: template.type,
-      category_id: template.category_id,
-      thumbnail_key: template.thumbnail_key,
-      template_key: template.template_key,
-      config_json: template.config_json,
-      is_premium: template.is_premium,
-      language: template.language,
-      is_active: isActive,
-    });
+    const endpoint = isActive
+      ? `/v1/templates/admin/${id}/enable`
+      : `/v1/templates/admin/${id}/disable`;
+    const response = await API.patch<ApiEnvelope<AdminTemplate>>(endpoint);
     return response.data.data;
   } catch (error) {
     throw new Error(getErrorMessage(error, `Unable to ${isActive ? 'resume' : 'pause'} template.`));
