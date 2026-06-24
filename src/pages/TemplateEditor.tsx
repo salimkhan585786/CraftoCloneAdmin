@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Image as KonvaImage, Rect, Circle, Transformer } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Rect, Circle, Transformer, Text } from 'react-konva';
 import useImage from 'use-image';
 import {
   Upload,
@@ -11,28 +11,112 @@ import {
   ChevronLeft,
   Play,
   Pause,
+  Type,
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { AdminTemplate, BackgroundCrop, PhotoFrame, TemplatePayload } from '../types';
+import { AdminCategory, AdminTemplate, AdminTemplateSummary, BackgroundCrop, PhotoFrame, Subcategory, TemplatePayload } from '../types';
 import { templateService } from '../services/templateService';
+import { categoryService } from '../services/categoryService';
+import { subcategoryService } from '../services/subcategoryService';
 
-const TEMPLATE_CANVAS_WIDTH = 300;
-const TEMPLATE_CANVAS_HEIGHT = 300;
-const REQUIRED_MEDIA_WIDTH = 300;
-const REQUIRED_MEDIA_HEIGHT = 300;
+interface AnimationDef {
+  id: string;
+  label: string;
+  type: 'entry' | 'loop';
+  from: Record<string, unknown>;
+  to: Record<string, unknown>;
+  loop: string | boolean;
+  duration: number;
+  easing: string | { type: string; speed: number; bounciness: number };
+}
+
+interface TextFieldConfig {
+  visible: boolean;
+  content: string;
+  position: { x: number; y: number };
+  userOffset: { x: number; y: number };
+  userScale: number;
+  width: number;
+  fontSize: number;
+  fontFamily: string;
+  fontWeight: string;
+  color: string;
+  align: string;
+  bold: boolean;
+  italic: boolean;
+  shadow: boolean;
+}
+
+interface TemplateVariable {
+  key: string;
+  label: string;
+  type: string;
+  default: string;
+}
+
+const ANIMATION_DEFINITIONS: AnimationDef[] = [
+  { id: 'fade_up', label: 'Fade Up', type: 'entry', from: { translateY: 346, opacity: 0.2 }, to: { translateY: 0, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
+  { id: 'slide_top_right', label: 'Top Right Entry', type: 'entry', from: { translateX: 756, translateY: -1344 }, to: { translateX: 0, translateY: 0 }, loop: false, duration: 1400, easing: 'ease' },
+  { id: 'pop_in', label: 'Pop In', type: 'entry', from: { scale: 0.55, opacity: 0.25 }, to: { scale: 1, opacity: 1 }, loop: false, duration: 1400, easing: { type: 'spring', speed: 1.8, bounciness: 14 } },
+  { id: 'rotate_soft_left', label: 'Rotate Left', type: 'entry', from: { rotate: '-12deg', scale: 0.95 }, to: { rotate: '0deg', scale: 1 }, loop: false, duration: 1400, easing: 'ease' },
+  { id: 'float_up_down', label: 'Float Up Down', type: 'loop', from: { translateY: -346 }, to: { translateY: 346 }, loop: 'alternateSlow', duration: 2200, easing: 'ease' },
+];
+
+const TEMPLATE_CANVAS_WIDTH = 270;
+const DEFAULT_OUTPUT_WIDTH = 1080;
+const DEFAULT_OUTPUT_HEIGHT = 1920;
 const MIN_BANNER_SCALE = 1;
 const MAX_BANNER_SCALE = 4;
-const MIN_FRAME_SIZE = 5;
-const MAX_FRAME_SIZE = 300;
+const MIN_FRAME_SIZE = 10;
+const MAX_FRAME_SIZE = 270;
+
+const defaultTextFieldName: TextFieldConfig = {
+  visible: true,
+  content: '{{name}}',
+  position: { x: 60, y: 1100 },
+  userOffset: { x: 0, y: 0 },
+  userScale: 1.0,
+  width: 960,
+  fontSize: 64,
+  fontFamily: 'Poppins',
+  fontWeight: 'bold',
+  color: '#FFFFFF',
+  align: 'center',
+  bold: true,
+  italic: false,
+  shadow: false,
+};
+
+const defaultTextFieldMessage: TextFieldConfig = {
+  visible: true,
+  content: '{{message}}',
+  position: { x: 60, y: 1200 },
+  userOffset: { x: 0, y: 0 },
+  userScale: 1.0,
+  width: 960,
+  fontSize: 36,
+  fontFamily: 'Inter',
+  fontWeight: 'normal',
+  color: '#EEEEEE',
+  align: 'center',
+  bold: false,
+  italic: false,
+  shadow: false,
+};
+
+const defaultTemplateVariables: TemplateVariable[] = [
+  { key: 'name', label: 'Your Name', type: 'text', default: 'Your Name' },
+  { key: 'message', label: 'Message', type: 'text', default: 'Happy Diwali!' },
+];
 
 type EditorMode = 'crop' | 'frame';
 
 const emptyFrame: PhotoFrame = {
   shape: 'rectangle',
-  x: 75,
-  y: 75,
-  width: 150,
-  height: 150,
+  x: 35,
+  y: 140,
+  width: 200,
+  height: 200,
   radius: 0,
 };
 
@@ -149,41 +233,41 @@ function getFrameNodePosition(nextFrame: PhotoFrame) {
   };
 }
 
-function createDefaultBackgroundCrop(mediaWidth: number, mediaHeight: number): BackgroundCrop {
-  const baseScale = Math.max(TEMPLATE_CANVAS_WIDTH / mediaWidth, TEMPLATE_CANVAS_HEIGHT / mediaHeight);
+function createDefaultBackgroundCrop(mediaWidth: number, mediaHeight: number, canvasWidth: number, canvasHeight: number): BackgroundCrop {
+  const baseScale = Math.max(canvasWidth / mediaWidth, canvasHeight / mediaHeight);
 
   return {
-    x: (TEMPLATE_CANVAS_WIDTH - mediaWidth * baseScale) / 2,
-    y: (TEMPLATE_CANVAS_HEIGHT - mediaHeight * baseScale) / 2,
+    x: (canvasWidth - mediaWidth * baseScale) / 2,
+    y: (canvasHeight - mediaHeight * baseScale) / 2,
     scale: 1,
     mediaWidth,
     mediaHeight,
   };
 }
 
-function clampBackgroundCrop(crop: BackgroundCrop, mediaWidth: number, mediaHeight: number): BackgroundCrop {
+function clampBackgroundCrop(crop: BackgroundCrop, mediaWidth: number, mediaHeight: number, canvasWidth: number, canvasHeight: number): BackgroundCrop {
   const safeScale = Math.min(MAX_BANNER_SCALE, Math.max(MIN_BANNER_SCALE, crop.scale || 1));
-  const baseScale = Math.max(TEMPLATE_CANVAS_WIDTH / mediaWidth, TEMPLATE_CANVAS_HEIGHT / mediaHeight);
+  const baseScale = Math.max(canvasWidth / mediaWidth, canvasHeight / mediaHeight);
   const renderWidth = mediaWidth * baseScale * safeScale;
   const renderHeight = mediaHeight * baseScale * safeScale;
-  const minX = Math.min(0, TEMPLATE_CANVAS_WIDTH - renderWidth);
-  const minY = Math.min(0, TEMPLATE_CANVAS_HEIGHT - renderHeight);
+  const minX = Math.min(0, canvasWidth - renderWidth);
+  const minY = Math.min(0, canvasHeight - renderHeight);
 
   return {
-    x: renderWidth <= TEMPLATE_CANVAS_WIDTH ? (TEMPLATE_CANVAS_WIDTH - renderWidth) / 2 : Math.min(0, Math.max(minX, crop.x)),
-    y: renderHeight <= TEMPLATE_CANVAS_HEIGHT ? (TEMPLATE_CANVAS_HEIGHT - renderHeight) / 2 : Math.min(0, Math.max(minY, crop.y)),
+    x: renderWidth <= canvasWidth ? (canvasWidth - renderWidth) / 2 : Math.min(0, Math.max(minX, crop.x)),
+    y: renderHeight <= canvasHeight ? (canvasHeight - renderHeight) / 2 : Math.min(0, Math.max(minY, crop.y)),
     scale: safeScale,
     mediaWidth,
     mediaHeight,
   };
 }
 
-function getBackgroundCropMetrics(crop: BackgroundCrop | null) {
+function getBackgroundCropMetrics(crop: BackgroundCrop | null, canvasWidth: number, canvasHeight: number) {
   if (!crop || crop.mediaWidth <= 0 || crop.mediaHeight <= 0) {
     return null;
   }
 
-  const baseScale = Math.max(TEMPLATE_CANVAS_WIDTH / crop.mediaWidth, TEMPLATE_CANVAS_HEIGHT / crop.mediaHeight);
+  const baseScale = Math.max(canvasWidth / crop.mediaWidth, canvasHeight / crop.mediaHeight);
   const renderScale = baseScale * crop.scale;
 
   return {
@@ -192,8 +276,8 @@ function getBackgroundCropMetrics(crop: BackgroundCrop | null) {
     renderHeight: crop.mediaHeight * renderScale,
     sourceX: Math.max(0, (-crop.x) / renderScale),
     sourceY: Math.max(0, (-crop.y) / renderScale),
-    sourceWidth: Math.min(crop.mediaWidth, TEMPLATE_CANVAS_WIDTH / renderScale),
-    sourceHeight: Math.min(crop.mediaHeight, TEMPLATE_CANVAS_HEIGHT / renderScale),
+    sourceWidth: Math.min(crop.mediaWidth, canvasWidth / renderScale),
+    sourceHeight: Math.min(crop.mediaHeight, canvasHeight / renderScale),
   };
 }
 
@@ -232,7 +316,12 @@ function getUploadedMediaSize(file: File) {
       video.onloadedmetadata = () => {
         const width = video.videoWidth;
         const height = video.videoHeight;
+        const duration = video.duration;
         cleanup();
+        if (duration > 30) {
+          reject(new Error('Video must be 30 seconds or shorter.'));
+          return;
+        }
         resolve({ width, height });
       };
       video.onerror = () => {
@@ -258,19 +347,8 @@ function getUploadedMediaSize(file: File) {
   });
 }
 
-async function shouldProceedWithMedia(file: File) {
-  if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-    return true;
-  }
-
-  const { width, height } = await getUploadedMediaSize(file);
-  if (width === REQUIRED_MEDIA_WIDTH && height === REQUIRED_MEDIA_HEIGHT) {
-    return true;
-  }
-
-  return window.confirm(
-    `Uploaded media is ${width}x${height}. Required size is exactly ${REQUIRED_MEDIA_WIDTH}x${REQUIRED_MEDIA_HEIGHT}. Proceed anyway?`,
-  );
+async function shouldProceedWithMedia(_file: File) {
+  return true;
 }
 
 export default function TemplateEditor() {
@@ -299,6 +377,27 @@ export default function TemplateEditor() {
   const [selected, setSelected] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>('crop');
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [photoFrameAnimation, setPhotoFrameAnimation] = useState('fade_up');
+  const [accentColor, setAccentColor] = useState('#0D62DF');
+  const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number } | null>(null);
+
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [activeSubcategoryId, setActiveSubcategoryId] = useState('');
+  const [textFieldName, setTextFieldName] = useState<TextFieldConfig>(defaultTextFieldName);
+  const [textFieldMessage, setTextFieldMessage] = useState<TextFieldConfig>(defaultTextFieldMessage);
+  const [selectedTextField, setSelectedTextField] = useState<'name' | 'message' | null>(null);
+  const [templateVariables, setTemplateVariables] = useState<TemplateVariable[]>(defaultTemplateVariables);
+  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const textNameRef = useRef<any>(null);
+  const textMessageRef = useRef<any>(null);
+  const textTrRef = useRef<any>(null);
+
+  const outputWidth = mediaDimensions?.width ?? DEFAULT_OUTPUT_WIDTH;
+  const outputHeight = mediaDimensions?.height ?? DEFAULT_OUTPUT_HEIGHT;
+  const displayHeight = Math.round(TEMPLATE_CANVAS_WIDTH * (outputHeight / outputWidth));
+  const FRAME_SCALE = outputWidth / TEMPLATE_CANVAS_WIDTH;
+
   const imagePreviewUrl = templateType === 'IMAGE' ? mediaPreviewUrl || '' : '';
   const [corsBgImage, corsImageStatus] = useImage(imagePreviewUrl, 'anonymous');
   const [plainBgImage] = useImage(corsImageStatus === 'failed' ? imagePreviewUrl : '');
@@ -320,6 +419,16 @@ export default function TemplateEditor() {
   }, [selected]);
 
   useEffect(() => {
+    if (selectedTextField && textTrRef.current) {
+      const node = selectedTextField === 'name' ? textNameRef.current : textMessageRef.current;
+      if (node) {
+        textTrRef.current.nodes([node]);
+        textTrRef.current.getLayer().batchDraw();
+      }
+    }
+  }, [selectedTextField]);
+
+  useEffect(() => {
     if (templateType !== 'IMAGE') {
       setBannerCrop(null);
       return;
@@ -339,12 +448,14 @@ export default function TemplateEditor() {
           },
           bgImageWidth,
           bgImageHeight,
+          TEMPLATE_CANVAS_WIDTH,
+          displayHeight,
         );
       }
 
-      return createDefaultBackgroundCrop(bgImageWidth, bgImageHeight);
+      return createDefaultBackgroundCrop(bgImageWidth, bgImageHeight, TEMPLATE_CANVAS_WIDTH, displayHeight);
     });
-  }, [bgImage, bgImageWidth, bgImageHeight, templateType]);
+  }, [bgImage, bgImageWidth, bgImageHeight, templateType, displayHeight]);
 
   useEffect(() => {
     if (!templateId) {
@@ -371,8 +482,25 @@ export default function TemplateEditor() {
     setIsVideoPlaying(false);
   }, [mediaPreviewUrl, templateType]);
 
+  useEffect(() => {
+    categoryService.listCategories().then((data) => {
+      setCategories(data.filter((c) => c.is_active !== false));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!activeCategoryId) {
+      setSubcategories([]);
+      return;
+    }
+    subcategoryService.listSubcategories(activeCategoryId).then((data) => {
+      setSubcategories(data);
+    }).catch(() => {});
+  }, [activeCategoryId]);
+
   const hydrateTemplate = (template: AdminTemplate) => {
     setActiveCategoryId(template.category_id || initialCategoryId || '');
+    setActiveSubcategoryId(template.subcategory_id || '');
     setTemplateName(template.name || '');
     setTemplateType(template.type || 'IMAGE');
     setLanguage(template.language || 'en');
@@ -382,14 +510,112 @@ export default function TemplateEditor() {
     setIsPremium(Boolean(template.is_premium));
     setExistingConfigJson(template.config_json ?? null);
     setSelected(false);
+    setSelectedTextField(null);
     setEditorMode(template.type === 'IMAGE' ? 'crop' : 'frame');
 
-    const maybeFrame = template.config_json ? (template.config_json as Record<string, unknown>).photo_frame : null;
-    const maybeBackgroundCrop = template.config_json ? (template.config_json as Record<string, unknown>).background_crop : null;
+    const config = (template.config_json ?? {}) as Record<string, unknown>;
 
-    setFrame(isPhotoFrame(maybeFrame) ? maybeFrame : emptyFrame);
+    const configWidth = typeof config.width === 'number' ? config.width : DEFAULT_OUTPUT_WIDTH;
+    const configHeight = typeof config.height === 'number' ? config.height : DEFAULT_OUTPUT_HEIGHT;
+    setMediaDimensions({ width: configWidth, height: configHeight });
+
+    const localFrameScale = configWidth / TEMPLATE_CANVAS_WIDTH;
+
+    const maybeFrame = (config.photoFrame ?? config.photo_frame) as Record<string, unknown> | undefined;
+    const maybeBackgroundCrop = config.background_crop as Record<string, unknown> | undefined;
+
+    if (isPhotoFrame(maybeFrame)) {
+      setFrame({
+        ...maybeFrame,
+        x: (maybeFrame.x ?? 0) / localFrameScale,
+        y: (maybeFrame.y ?? 0) / localFrameScale,
+        width: (maybeFrame.width ?? 200) / localFrameScale,
+        height: (maybeFrame.height ?? 200) / localFrameScale,
+        radius: maybeFrame.radius != null ? maybeFrame.radius / localFrameScale : undefined,
+      });
+    } else {
+      setFrame(emptyFrame);
+    }
+
     setBannerCrop(isBackgroundCrop(maybeBackgroundCrop) ? maybeBackgroundCrop : null);
     setShouldExportBannerCrop(false);
+
+    const maybePhotoFrame = config.photoFrame as Record<string, unknown> | undefined;
+    if (maybePhotoFrame?.animation && typeof maybePhotoFrame.animation === 'object') {
+      const anim = maybePhotoFrame.animation as Record<string, unknown>;
+      if (typeof anim.id === 'string') {
+        setPhotoFrameAnimation(anim.id);
+      }
+    }
+
+    const tmpl = config.template as Record<string, unknown> | undefined;
+    if (typeof tmpl?.accentColor === 'string') {
+      setAccentColor(tmpl.accentColor);
+    }
+
+    const tf = config.textFields as Record<string, unknown> | undefined;
+    if (tf) {
+      if (tf.name && typeof tf.name === 'object') {
+        const n = tf.name as Record<string, unknown>;
+        setTextFieldName({
+          visible: Boolean(n.visible ?? true),
+          content: typeof n.content === 'string' ? n.content : '{{name}}',
+          position: (n.position && typeof n.position === 'object') ? n.position as { x: number; y: number } : defaultTextFieldName.position,
+          userOffset: (n.userOffset && typeof n.userOffset === 'object') ? n.userOffset as { x: number; y: number } : { x: 0, y: 0 },
+          userScale: typeof n.userScale === 'number' ? n.userScale : 1.0,
+          width: typeof n.width === 'number' ? n.width : defaultTextFieldName.width,
+          fontSize: typeof n.fontSize === 'number' ? n.fontSize : defaultTextFieldName.fontSize,
+          fontFamily: typeof n.fontFamily === 'string' ? n.fontFamily : defaultTextFieldName.fontFamily,
+          fontWeight: typeof n.fontWeight === 'string' ? n.fontWeight : defaultTextFieldName.fontWeight,
+          color: typeof n.color === 'string' ? n.color : defaultTextFieldName.color,
+          align: typeof n.align === 'string' ? n.align : defaultTextFieldName.align,
+          bold: Boolean(n.bold),
+          italic: Boolean(n.italic),
+          shadow: Boolean(n.shadow),
+        });
+      }
+      if (tf.message && typeof tf.message === 'object') {
+        const m = tf.message as Record<string, unknown>;
+        setTextFieldMessage({
+          visible: Boolean(m.visible ?? true),
+          content: typeof m.content === 'string' ? m.content : '{{message}}',
+          position: (m.position && typeof m.position === 'object') ? m.position as { x: number; y: number } : defaultTextFieldMessage.position,
+          userOffset: (m.userOffset && typeof m.userOffset === 'object') ? m.userOffset as { x: number; y: number } : { x: 0, y: 0 },
+          userScale: typeof m.userScale === 'number' ? m.userScale : 1.0,
+          width: typeof m.width === 'number' ? m.width : defaultTextFieldMessage.width,
+          fontSize: typeof m.fontSize === 'number' ? m.fontSize : defaultTextFieldMessage.fontSize,
+          fontFamily: typeof m.fontFamily === 'string' ? m.fontFamily : defaultTextFieldMessage.fontFamily,
+          fontWeight: typeof m.fontWeight === 'string' ? m.fontWeight : defaultTextFieldMessage.fontWeight,
+          color: typeof m.color === 'string' ? m.color : defaultTextFieldMessage.color,
+          align: typeof m.align === 'string' ? m.align : defaultTextFieldMessage.align,
+          bold: Boolean(m.bold),
+          italic: Boolean(m.italic),
+          shadow: Boolean(m.shadow),
+        });
+      }
+    }
+
+    if (Array.isArray(config.variables)) {
+      const vars = config.variables as Array<Record<string, unknown>>;
+      const parsed: TemplateVariable[] = vars.map((v) => ({
+        key: typeof v.key === 'string' ? v.key : '',
+        label: typeof v.label === 'string' ? v.label : '',
+        type: typeof v.type === 'string' ? v.type : 'text',
+        default: typeof v.default === 'string' ? v.default : '',
+      })).filter((v) => v.key);
+      if (parsed.length > 0) {
+        setTemplateVariables(parsed);
+      }
+    }
+
+    const tv = config.templateVariables as Record<string, unknown> | undefined;
+    if (tv && typeof tv === 'object') {
+      const vals: Record<string, string> = {};
+      Object.entries(tv).forEach(([k, v]) => {
+        vals[k] = typeof v === 'string' ? v : String(v ?? '');
+      });
+      setVariableValues(vals);
+    }
   };
 
   const handleShapeChange = (shape: 'circle' | 'square' | 'rectangle') => {
@@ -490,7 +716,7 @@ export default function TemplateEditor() {
         return currentCrop;
       }
 
-      const currentMetrics = getBackgroundCropMetrics(currentCrop);
+      const currentMetrics = getBackgroundCropMetrics(currentCrop, TEMPLATE_CANVAS_WIDTH, displayHeight);
 
       if (!currentMetrics) {
         return currentCrop;
@@ -501,17 +727,19 @@ export default function TemplateEditor() {
       const nextRenderWidth = currentMetrics.renderWidth * scaleRatio;
       const nextRenderHeight = currentMetrics.renderHeight * scaleRatio;
       const relativeCenterX = (TEMPLATE_CANVAS_WIDTH / 2 - currentCrop.x) / currentMetrics.renderWidth;
-      const relativeCenterY = (TEMPLATE_CANVAS_HEIGHT / 2 - currentCrop.y) / currentMetrics.renderHeight;
+      const relativeCenterY = (displayHeight / 2 - currentCrop.y) / currentMetrics.renderHeight;
 
       return clampBackgroundCrop(
         {
           ...currentCrop,
           scale: safeScale,
           x: TEMPLATE_CANVAS_WIDTH / 2 - relativeCenterX * nextRenderWidth,
-          y: TEMPLATE_CANVAS_HEIGHT / 2 - relativeCenterY * nextRenderHeight,
+          y: displayHeight / 2 - relativeCenterY * nextRenderHeight,
         },
         currentCrop.mediaWidth,
         currentCrop.mediaHeight,
+        TEMPLATE_CANVAS_WIDTH,
+        displayHeight,
       );
     });
   };
@@ -535,6 +763,7 @@ export default function TemplateEditor() {
     setIsUploadingBanner(true);
 
     try {
+      const { width, height } = await getUploadedMediaSize(file);
       const asset = await templateService.uploadAsset(file);
       const previewUrl = getDisplayUrl(asset.url, file);
       const nextType = file.type.startsWith('video/') ? 'VIDEO' : 'IMAGE';
@@ -544,6 +773,7 @@ export default function TemplateEditor() {
       setTemplateKey(derivedKeys.templateAssetKey);
       setThumbnailKey(derivedKeys.thumbnailAssetKey);
       setMediaPreviewUrl(previewUrl);
+      setMediaDimensions({ width, height });
       setSelected(false);
       setEditorMode(nextType === 'IMAGE' ? 'crop' : 'frame');
       setBannerCrop(null);
@@ -553,7 +783,7 @@ export default function TemplateEditor() {
         setTemplateName(derivedKeys.defaultTemplateName);
       }
 
-      setSuccessMessage(`${nextType === 'VIDEO' ? 'Video' : 'Image'} banner uploaded successfully.`);
+      setSuccessMessage(`${nextType === 'VIDEO' ? 'Video' : 'Image'} banner uploaded successfully (${width}×${height}).`);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload file.');
     } finally {
@@ -596,70 +826,72 @@ export default function TemplateEditor() {
   ): TemplatePayload => {
     const nextConfig: Record<string, unknown> = { ...(existingConfigJson ?? {}) };
 
-    nextConfig.width = TEMPLATE_CANVAS_WIDTH;
-    nextConfig.height = TEMPLATE_CANVAS_HEIGHT;
-
-    if (nextBackgroundPreview) {
-      nextConfig.background_preview = nextBackgroundPreview;
-    }
+    nextConfig.width = outputWidth;
+    nextConfig.height = outputHeight;
 
     nextConfig.photoFrame = {
-      x: frame.x,
-      y: frame.y,
-      width: frame.width,
-      height: frame.height,
-      borderRadius: frame.shape === 'circle' ? (frame.radius ?? frame.width / 2) : 0,
+      x: Math.round(frame.x * FRAME_SCALE),
+      y: Math.round(frame.y * FRAME_SCALE),
+      width: Math.round(frame.width * FRAME_SCALE),
+      height: Math.round(frame.height * FRAME_SCALE),
       borderColor: '#FFFFFF',
       borderWidth: 3,
       shape: frame.shape,
+      animation: { id: photoFrameAnimation, config: {} },
     };
     delete nextConfig.photo_frame;
     delete nextConfig.background_crop;
+    delete nextConfig.background_preview;
 
     if (!nextConfig.template) {
       nextConfig.template = {
-        canvas: { width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT },
-        accentColor: '#0D62DF',
-        backgroundColor: '#DDE5EC',
+        canvas: { width: outputWidth, height: outputHeight },
+        accentColor,
       };
+    } else {
+      (nextConfig.template as Record<string, unknown>).accentColor = accentColor;
     }
 
-    if (!nextConfig.textFields) {
-      nextConfig.textFields = {
-        name: {
-          visible: true,
-          content: '{{name}}',
-          position: { x: 60, y: 1100 },
-          userOffset: { x: 0, y: 0 },
-          userScale: 1.0,
-          width: 960,
-          fontSize: 64,
-          fontFamily: 'Poppins',
-          fontWeight: 'bold',
-          color: '#FFFFFF',
-          align: 'center',
-          bold: true,
-          italic: false,
-          shadow: false,
+    nextConfig.textFields = {
+      name: {
+        visible: textFieldName.visible,
+        content: textFieldName.content,
+        position: {
+          x: Math.round(textFieldName.position.x * FRAME_SCALE),
+          y: Math.round(textFieldName.position.y * FRAME_SCALE),
         },
-        message: {
-          visible: true,
-          content: '{{message}}',
-          position: { x: 60, y: 1200 },
-          userOffset: { x: 0, y: 0 },
-          userScale: 1.0,
-          width: 960,
-          fontSize: 36,
-          fontFamily: 'Inter',
-          fontWeight: 'normal',
-          color: '#EEEEEE',
-          align: 'center',
-          bold: false,
-          italic: false,
-          shadow: false,
+        userOffset: textFieldName.userOffset,
+        userScale: textFieldName.userScale,
+        width: Math.round(textFieldName.width * FRAME_SCALE),
+        fontSize: Math.round(textFieldName.fontSize * FRAME_SCALE),
+        fontFamily: textFieldName.fontFamily,
+        fontWeight: textFieldName.fontWeight,
+        color: textFieldName.color,
+        align: textFieldName.align,
+        bold: textFieldName.bold,
+        italic: textFieldName.italic,
+        shadow: textFieldName.shadow,
+      },
+      message: {
+        visible: textFieldMessage.visible,
+        content: textFieldMessage.content,
+        position: {
+          x: Math.round(textFieldMessage.position.x * FRAME_SCALE),
+          y: Math.round(textFieldMessage.position.y * FRAME_SCALE),
         },
-      };
-    }
+        userOffset: textFieldMessage.userOffset,
+        userScale: textFieldMessage.userScale,
+        width: Math.round(textFieldMessage.width * FRAME_SCALE),
+        fontSize: Math.round(textFieldMessage.fontSize * FRAME_SCALE),
+        fontFamily: textFieldMessage.fontFamily,
+        fontWeight: textFieldMessage.fontWeight,
+        color: textFieldMessage.color,
+        align: textFieldMessage.align,
+        bold: textFieldMessage.bold,
+        italic: textFieldMessage.italic,
+        shadow: textFieldMessage.shadow,
+      },
+    };
 
     if (!nextConfig.backgroundOverlay) {
       nextConfig.backgroundOverlay = { enabled: true, color: 'rgba(0, 0, 0, 0.3)', opacity: 0.3 };
@@ -669,27 +901,31 @@ export default function TemplateEditor() {
       nextConfig.output = {
         format: templateType === 'VIDEO' ? 'MP4' : 'JPEG',
         quality: 'high',
-        width: TEMPLATE_CANVAS_WIDTH,
-        height: TEMPLATE_CANVAS_HEIGHT,
+        width: outputWidth,
+        height: outputHeight,
         ...(templateType === 'VIDEO' ? { fps: 30, duration: 10 } : {}),
       };
     }
 
-    if (!nextConfig.variables) {
-      nextConfig.variables = [
-        { key: 'name', label: 'Your Name', type: 'text', default: 'Your Name' },
-        { key: 'message', label: 'Message', type: 'text', default: 'Happy Diwali!' },
-      ];
-    }
+    nextConfig.variables = templateVariables;
+
+    nextConfig.templateVariables = { ...variableValues };
 
     if (templateType === 'VIDEO' && !nextConfig.animation) {
-      nextConfig.animation = [
-        { id: 'fade_up', from: { translateY: 346, opacity: 0.2 }, to: { translateY: 0, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
-        { id: 'pop_in', from: { scale: 0.55, opacity: 0.25 }, to: { scale: 1, opacity: 1 }, loop: false, duration: 1400, easing: 'ease' },
-      ];
+      const photoFrameAnimDef = ANIMATION_DEFINITIONS.find((a) => a.id === photoFrameAnimation);
+      if (photoFrameAnimDef) {
+        nextConfig.animation = [{
+          id: photoFrameAnimDef.id,
+          from: photoFrameAnimDef.from,
+          to: photoFrameAnimDef.to,
+          loop: photoFrameAnimDef.loop,
+          duration: photoFrameAnimDef.duration,
+          easing: photoFrameAnimDef.easing,
+        }];
+      }
     }
 
-    return {
+    const payload: TemplatePayload = {
       name: templateName,
       type: templateType,
       category_id: activeCategoryId,
@@ -699,6 +935,12 @@ export default function TemplateEditor() {
       is_premium: isPremium,
       language,
     };
+
+    if (activeSubcategoryId) {
+      payload.subcategory_id = activeSubcategoryId;
+    }
+
+    return payload;
   };
 
   const exportCroppedBanner = async () => {
@@ -710,15 +952,15 @@ export default function TemplateEditor() {
       throw new Error('Upload an image and adjust the reel crop before saving.');
     }
 
-    const cropMetrics = getBackgroundCropMetrics(bannerCrop);
+    const cropMetrics = getBackgroundCropMetrics(bannerCrop, TEMPLATE_CANVAS_WIDTH, displayHeight);
 
     if (!cropMetrics) {
       throw new Error('Unable to calculate the cropped banner area.');
     }
 
     const canvas = document.createElement('canvas');
-    canvas.width = TEMPLATE_CANVAS_WIDTH;
-    canvas.height = TEMPLATE_CANVAS_HEIGHT;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
 
     const context = canvas.getContext('2d');
 
@@ -734,8 +976,8 @@ export default function TemplateEditor() {
       cropMetrics.sourceHeight,
       0,
       0,
-      TEMPLATE_CANVAS_WIDTH,
-      TEMPLATE_CANVAS_HEIGHT,
+      outputWidth,
+      outputHeight,
     );
 
     const croppedFile = await canvasToFile(
@@ -787,7 +1029,7 @@ export default function TemplateEditor() {
         setTemplateKey(nextTemplateKey);
         setThumbnailKey(nextThumbnailKey);
         setMediaPreviewUrl(nextPreviewUrl);
-        setBannerCrop(createDefaultBackgroundCrop(TEMPLATE_CANVAS_WIDTH, TEMPLATE_CANVAS_HEIGHT));
+        setBannerCrop(createDefaultBackgroundCrop(bgImageWidth || outputWidth, bgImageHeight || outputHeight, TEMPLATE_CANVAS_WIDTH, displayHeight));
         setShouldExportBannerCrop(false);
       }
 
@@ -807,7 +1049,7 @@ export default function TemplateEditor() {
     }
   };
 
-  const cropMetrics = getBackgroundCropMetrics(bannerCrop);
+  const cropMetrics = getBackgroundCropMetrics(bannerCrop, TEMPLATE_CANVAS_WIDTH, displayHeight);
   const canRenderBackgroundInStage = Boolean(templateType === 'IMAGE' && bgImage && bannerCrop && cropMetrics);
   const videoFrameOverlayStyle: React.CSSProperties = {
     left: frame.x,
@@ -826,7 +1068,10 @@ export default function TemplateEditor() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">{templateId ? 'Edit Template' : 'Template Editor'}</h1>
-            <p className="text-zinc-500 text-sm">Category ID: {activeCategoryId || 'Missing'}</p>
+            <p className="text-zinc-500 text-sm">
+              {categories.find((c) => c.id === activeCategoryId)?.name || activeCategoryId || 'No category'}
+              {activeSubcategoryId ? ` / ${subcategories.find((s) => s.id === activeSubcategoryId)?.name || activeSubcategoryId}` : ''}
+            </p>
           </div>
         </div>
 
@@ -882,7 +1127,7 @@ export default function TemplateEditor() {
             )}
 
             <div className="bg-white shadow-2xl">
-              <div className="relative overflow-hidden" style={{ width: TEMPLATE_CANVAS_WIDTH, height: TEMPLATE_CANVAS_HEIGHT }}>
+              <div className="relative overflow-hidden" style={{ width: TEMPLATE_CANVAS_WIDTH, height: displayHeight }}>
                 {templateType === 'VIDEO' ? (
                   mediaPreviewUrl ? (
                     <>
@@ -933,13 +1178,14 @@ export default function TemplateEditor() {
 
                 <Stage
                   width={TEMPLATE_CANVAS_WIDTH}
-                  height={TEMPLATE_CANVAS_HEIGHT}
+                  height={displayHeight}
                   className="absolute inset-0 z-10"
                   onMouseDown={(e) => {
                     const clickedOnEmpty = e.target === e.target.getStage();
 
                     if (clickedOnEmpty && editorMode === 'frame') {
                       setSelected(false);
+                      setSelectedTextField(null);
                     }
                   }}
                   onWheel={(e) => {
@@ -979,6 +1225,8 @@ export default function TemplateEditor() {
                               },
                               bannerCrop.mediaWidth,
                               bannerCrop.mediaHeight,
+                              TEMPLATE_CANVAS_WIDTH,
+                              displayHeight,
                             ),
                           );
                         }}
@@ -1044,6 +1292,85 @@ export default function TemplateEditor() {
                         }}
                       />
                     )}
+
+                    {textFieldName.visible && (
+                      <Text
+                        ref={textNameRef}
+                        x={textFieldName.position.x / FRAME_SCALE}
+                        y={textFieldName.position.y / FRAME_SCALE}
+                        text={textFieldName.content}
+                        fontSize={textFieldName.fontSize / FRAME_SCALE}
+                        fontFamily={textFieldName.fontFamily}
+                        fontStyle={`${textFieldName.bold ? 'bold ' : ''}${textFieldName.italic ? 'italic ' : ''}`.trim() || 'normal'}
+                        fill={textFieldName.color}
+                        align={textFieldName.align as any}
+                        width={textFieldName.width / FRAME_SCALE}
+                        draggable={editorMode === 'frame'}
+                        onClick={() => {
+                          setEditorMode('frame');
+                          setSelectedTextField('name');
+                          setSelected(false);
+                        }}
+                        onTap={() => {
+                          setEditorMode('frame');
+                          setSelectedTextField('name');
+                          setSelected(false);
+                        }}
+                        onDragEnd={(e) => {
+                          setTextFieldName((prev) => ({
+                            ...prev,
+                            position: {
+                              x: Math.round(e.target.x() * FRAME_SCALE),
+                              y: Math.round(e.target.y() * FRAME_SCALE),
+                            },
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {textFieldMessage.visible && (
+                      <Text
+                        ref={textMessageRef}
+                        x={textFieldMessage.position.x / FRAME_SCALE}
+                        y={textFieldMessage.position.y / FRAME_SCALE}
+                        text={textFieldMessage.content}
+                        fontSize={textFieldMessage.fontSize / FRAME_SCALE}
+                        fontFamily={textFieldMessage.fontFamily}
+                        fontStyle={`${textFieldMessage.bold ? 'bold ' : ''}${textFieldMessage.italic ? 'italic ' : ''}`.trim() || 'normal'}
+                        fill={textFieldMessage.color}
+                        align={textFieldMessage.align as any}
+                        width={textFieldMessage.width / FRAME_SCALE}
+                        draggable={editorMode === 'frame'}
+                        onClick={() => {
+                          setEditorMode('frame');
+                          setSelectedTextField('message');
+                          setSelected(false);
+                        }}
+                        onTap={() => {
+                          setEditorMode('frame');
+                          setSelectedTextField('message');
+                          setSelected(false);
+                        }}
+                        onDragEnd={(e) => {
+                          setTextFieldMessage((prev) => ({
+                            ...prev,
+                            position: {
+                              x: Math.round(e.target.x() * FRAME_SCALE),
+                              y: Math.round(e.target.y() * FRAME_SCALE),
+                            },
+                          }));
+                        }}
+                      />
+                    )}
+
+                    {selectedTextField && (
+                      <Transformer
+                        ref={textTrRef}
+                        keepRatio={false}
+                        enabledAnchors={[]}
+                        boundBoxFunc={(oldBox, newBox) => newBox}
+                      />
+                    )}
                   </Layer>
                 </Stage>
               </div>
@@ -1062,6 +1389,30 @@ export default function TemplateEditor() {
                   placeholder="Template name"
                   className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 />
+                <select
+                  value={activeCategoryId}
+                  onChange={(e) => {
+                    setActiveCategoryId(e.target.value);
+                    setActiveSubcategoryId('');
+                  }}
+                  className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                >
+                  <option value="">Select category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={activeSubcategoryId}
+                  onChange={(e) => setActiveSubcategoryId(e.target.value)}
+                  disabled={!activeCategoryId || subcategories.length === 0}
+                  className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all disabled:opacity-50"
+                >
+                  <option value="">Select subcategory (optional)</option>
+                  {subcategories.map((sub) => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  ))}
+                </select>
                 <select
                   value={templateType}
                   onChange={(e) => setTemplateType(e.target.value as 'IMAGE' | 'VIDEO')}
@@ -1126,7 +1477,7 @@ export default function TemplateEditor() {
                   onClick={() => {
                     if (bgImage?.width && bgImage?.height) {
                       setShouldExportBannerCrop(true);
-                      setBannerCrop(createDefaultBackgroundCrop(bgImage.width, bgImage.height));
+                      setBannerCrop(createDefaultBackgroundCrop(bgImage.width, bgImage.height, TEMPLATE_CANVAS_WIDTH, displayHeight));
                     }
                   }}
                   disabled={templateType !== 'IMAGE' || !bgImage}
@@ -1148,7 +1499,7 @@ export default function TemplateEditor() {
                     <div>
                       <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
                         <span>Width</span>
-                        <span>{Math.round(frame.width)}px</span>
+                        <span>{Math.round(frame.width * FRAME_SCALE)}px</span>
                       </div>
                       <div className="grid grid-cols-[1fr_76px] gap-3">
                         <input
@@ -1164,16 +1515,16 @@ export default function TemplateEditor() {
                           type="number"
                           min={MIN_FRAME_SIZE}
                           max={MAX_FRAME_SIZE}
-                          value={Math.round(frame.width)}
-                          onChange={(e) => updateFrameSize(Number(e.target.value), frame.height)}
-                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={Math.round(frame.width * FRAME_SCALE)}
+                          readOnly
+                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700"
                         />
                       </div>
                     </div>
                     <div>
                       <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
                         <span>Height</span>
-                        <span>{Math.round(frame.height)}px</span>
+                        <span>{Math.round(frame.height * FRAME_SCALE)}px</span>
                       </div>
                       <div className="grid grid-cols-[1fr_76px] gap-3">
                         <input
@@ -1189,9 +1540,9 @@ export default function TemplateEditor() {
                           type="number"
                           min={MIN_FRAME_SIZE}
                           max={MAX_FRAME_SIZE}
-                          value={Math.round(frame.height)}
-                          onChange={(e) => updateFrameSize(frame.width, Number(e.target.value))}
-                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={Math.round(frame.height * FRAME_SCALE)}
+                          readOnly
+                          className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700"
                         />
                       </div>
                     </div>
@@ -1200,7 +1551,7 @@ export default function TemplateEditor() {
                   <div>
                     <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
                       <span>Size</span>
-                      <span>{Math.round(frame.width)}px</span>
+                      <span>{Math.round(frame.width * FRAME_SCALE)}px</span>
                     </div>
                     <div className="grid grid-cols-[1fr_76px] gap-3">
                       <input
@@ -1216,22 +1567,13 @@ export default function TemplateEditor() {
                         type="number"
                         min={MIN_FRAME_SIZE}
                         max={MAX_FRAME_SIZE}
-                        value={Math.round(frame.width)}
-                        onChange={(e) => updateFrameSize(Number(e.target.value))}
-                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        value={Math.round(frame.width * FRAME_SCALE)}
+                        readOnly
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700"
                       />
                     </div>
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    setEditorMode('frame');
-                    setSelected(true);
-                  }}
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
-                >
-                  Select Frame
-                </button>
               </div>
             </section>
 
@@ -1253,11 +1595,12 @@ export default function TemplateEditor() {
             <div className="space-y-6">
             <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
               <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Editor Mode</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
                     setEditorMode('crop');
                     setSelected(false);
+                    setSelectedTextField(null);
                   }}
                   disabled={templateType !== 'IMAGE' || !bgImage}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
@@ -1266,21 +1609,38 @@ export default function TemplateEditor() {
                       : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
                   } disabled:opacity-50`}
                 >
-                  Crop Banner
+                  Crop
                 </button>
                 <button
-                  onClick={() => setEditorMode('frame')}
+                  onClick={() => {
+                    setEditorMode('frame');
+                    setSelectedTextField(null);
+                  }}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
-                    editorMode === 'frame'
+                    editorMode === 'frame' && !selectedTextField
                       ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
                       : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
                   }`}
                 >
-                  Place Photo
+                  Photo
+                </button>
+                <button
+                  onClick={() => {
+                    setEditorMode('frame');
+                    setSelected(false);
+                    setSelectedTextField(selectedTextField || 'name');
+                  }}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+                    selectedTextField
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                      : 'bg-zinc-50 border-zinc-100 text-zinc-500 hover:bg-zinc-100'
+                  }`}
+                >
+                  Text
                 </button>
               </div>
               <p className="mt-3 text-xs text-zinc-500">
-                Crop mode matches the mobile poster viewport. Drag the image and use mouse wheel or the zoom slider to choose the exact visible area.
+                Crop mode adjusts the banner. Photo mode lets you drag the user image frame. Text mode lets you position name and message fields.
               </p>
             </section>
 
@@ -1324,56 +1684,246 @@ export default function TemplateEditor() {
             </section>
 
             <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Animations</h3>
+              <div>
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 block">Photo Frame</label>
+                <select
+                  value={photoFrameAnimation}
+                  onChange={(e) => setPhotoFrameAnimation(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+                >
+                  {ANIMATION_DEFINITIONS.map((anim) => (
+                    <option key={anim.id} value={anim.id}>
+                      {anim.label} ({anim.type})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-zinc-500 mt-1">Animation applied to the photo frame and content elements.</p>
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Accent Color</h3>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={accentColor}
+                  onChange={(e) => setAccentColor(e.target.value)}
+                  className="h-10 w-14 rounded-lg border border-zinc-200 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={accentColor}
+                  onChange={(e) => setAccentColor(e.target.value)}
+                  className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm font-mono"
+                />
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">Text Fields</h3>
+                <Type size={16} className="text-zinc-400" />
+              </div>
+              <div className="space-y-4">
+                {(['name', 'message'] as const).map((fieldKey) => {
+                  const field = fieldKey === 'name' ? textFieldName : textFieldMessage;
+                  const setField = fieldKey === 'name' ? setTextFieldName : setTextFieldMessage;
+                  const isActive = selectedTextField === fieldKey;
+                  return (
+                    <div
+                      key={fieldKey}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                        isActive ? 'border-indigo-300 bg-indigo-50/50' : 'border-zinc-100 bg-zinc-50 hover:bg-zinc-100'
+                      }`}
+                      onClick={() => {
+                        setSelectedTextField(fieldKey);
+                        setSelected(false);
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{fieldKey === 'name' ? 'Name Field' : 'Message Field'}</span>
+                        <label className="flex items-center gap-2 text-xs text-zinc-500">
+                          <input
+                            type="checkbox"
+                            checked={field.visible}
+                            onChange={(e) => setField((prev) => ({ ...prev, visible: e.target.checked }))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-3.5 w-3.5 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          Visible
+                        </label>
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={field.content}
+                          onChange={(e) => setField((prev) => ({ ...prev, content: e.target.value }))}
+                          onClick={(e) => e.stopPropagation()}
+                          placeholder="Content (e.g. {{name}})"
+                          className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Color</label>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <input
+                                type="color"
+                                value={field.color}
+                                onChange={(e) => setField((prev) => ({ ...prev, color: e.target.value }))}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-7 w-9 rounded border border-zinc-200 cursor-pointer"
+                              />
+                              <input
+                                type="text"
+                                value={field.color}
+                                onChange={(e) => setField((prev) => ({ ...prev, color: e.target.value }))}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex-1 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-[11px] font-mono focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase">Font Size</label>
+                            <input
+                              type="number"
+                              min={8}
+                              max={200}
+                              value={field.fontSize}
+                              onChange={(e) => setField((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full mt-0.5 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-[11px] font-mono focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-3">
+                          <label className="flex items-center gap-1.5 text-[11px] text-zinc-600">
+                            <input
+                              type="checkbox"
+                              checked={field.bold}
+                              onChange={(e) => setField((prev) => ({ ...prev, bold: e.target.checked, fontWeight: e.target.checked ? 'bold' : 'normal' }))}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-3 w-3 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            Bold
+                          </label>
+                          <label className="flex items-center gap-1.5 text-[11px] text-zinc-600">
+                            <input
+                              type="checkbox"
+                              checked={field.italic}
+                              onChange={(e) => setField((prev) => ({ ...prev, italic: e.target.checked }))}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-3 w-3 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            Italic
+                          </label>
+                          <select
+                            value={field.align}
+                            onChange={(e) => setField((prev) => ({ ...prev, align: e.target.value }))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-0.5 bg-white border border-zinc-200 rounded-lg text-[11px] focus:outline-none"
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Template Variables</h3>
+              <div className="space-y-3">
+                {templateVariables.map((variable, index) => (
+                  <div key={variable.key} className="grid grid-cols-[1fr_1fr] gap-2">
+                    <input
+                      type="text"
+                      value={variable.label}
+                      onChange={(e) => {
+                        setTemplateVariables((prev) => prev.map((v, i) => i === index ? { ...v, label: e.target.value } : v));
+                      }}
+                      placeholder="Label"
+                      className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    />
+                    <input
+                      type="text"
+                      value={variableValues[variable.key] || ''}
+                      onChange={(e) => {
+                        setVariableValues((prev) => ({ ...prev, [variable.key]: e.target.value }));
+                      }}
+                      placeholder="Default value"
+                      className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newKey = `var_${Date.now()}`;
+                    setTemplateVariables((prev) => [...prev, { key: newKey, label: '', type: 'text', default: '' }]);
+                  }}
+                  className="w-full rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-2 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 transition-colors"
+                >
+                  + Add Variable
+                </button>
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
               <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Live Coordinates</h3>
               <div className="space-y-3">
                 {bannerCrop && cropMetrics && (
                   <>
                     <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                       <span className="text-xs font-bold text-zinc-500">Banner X</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(bannerCrop.x)}px</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(bannerCrop.x * FRAME_SCALE)}px</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                       <span className="text-xs font-bold text-zinc-500">Banner Y</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(bannerCrop.y)}px</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(bannerCrop.y * FRAME_SCALE)}px</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                       <span className="text-xs font-bold text-zinc-500">Crop Source X</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceX)}px</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceX * FRAME_SCALE)}px</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                       <span className="text-xs font-bold text-zinc-500">Crop Source Y</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceY)}px</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceY * FRAME_SCALE)}px</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                       <span className="text-xs font-bold text-zinc-500">Crop Width</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceWidth)}px</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceWidth * FRAME_SCALE)}px</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                       <span className="text-xs font-bold text-zinc-500">Crop Height</span>
-                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceHeight)}px</span>
+                      <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(cropMetrics.sourceHeight * FRAME_SCALE)}px</span>
                     </div>
                   </>
                 )}
                 <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                   <span className="text-xs font-bold text-zinc-500">Frame X</span>
-                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.x)}px</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.x * FRAME_SCALE)}px</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                   <span className="text-xs font-bold text-zinc-500">Frame Y</span>
-                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.y)}px</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.y * FRAME_SCALE)}px</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                   <span className="text-xs font-bold text-zinc-500">Frame Width</span>
-                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.width)}px</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.width * FRAME_SCALE)}px</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                   <span className="text-xs font-bold text-zinc-500">Frame Height</span>
-                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.height)}px</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.height * FRAME_SCALE)}px</span>
                 </div>
                 {frame.shape === 'circle' && (
                   <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                     <span className="text-xs font-bold text-zinc-500">Radius</span>
-                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(frame.radius || 0)}px</span>
+                    <span className="text-sm font-mono font-bold text-zinc-900">{Math.round((frame.radius || 0) * FRAME_SCALE)}px</span>
                   </div>
                 )}
               </div>

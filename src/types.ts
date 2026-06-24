@@ -52,6 +52,7 @@ export interface TemplatePayload {
   name: string;
   type: 'IMAGE' | 'VIDEO';
   category_id: string;
+  subcategory_id?: string;
   thumbnail_key: string;
   template_key: string;
   config_json: Record<string, unknown> | null;
@@ -65,6 +66,7 @@ export interface AdminTemplate {
   name: string;
   type: 'IMAGE' | 'VIDEO';
   category_id: string;
+  subcategory_id?: string;
   thumbnail_key: string;
   template_key: string;
   config_json: Record<string, unknown> | null;
@@ -213,4 +215,25 @@ export interface UpdateProfilePayload {
 
 export interface TrendingCleanupResult {
   cleaned: number;
+}
+
+export interface Subcategory {
+  id: string;
+  name: string;
+  category_id: string;
+  description: string;
+  icon_key: string;
+  image_key: string;
+  image_url: string | null;
+  is_active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubcategoryPayload {
+  name: string;
+  category_id: string;
+  description: string;
+  icon_key: string;
+  image_key: string;
 }

@@ -1,11 +1,12 @@
 import React from 'react';
-import { Crown, Globe2, Image as ImageIcon, LayoutDashboard, Layers, Users } from 'lucide-react';
+import { Crown, Globe2, Image as ImageIcon, LayoutDashboard, Layers, ListTree, Users } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Users, label: 'Users', path: '/users' },
   { icon: Layers, label: 'Categories', path: '/categories' },
+  { icon: ListTree, label: 'Subcategories', path: '/subcategories' },
   { icon: ImageIcon, label: 'Templates', path: '/templates' },
   { icon: Globe2, label: 'Languages', path: '/languages' },
   { icon: Crown, label: 'Subscriptions', path: '/subscriptions' },

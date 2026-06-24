@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Categories from './pages/Categories';
+import Subcategories from './pages/Subcategories';
 import Templates from './pages/Templates';
 import TemplateEditor from './pages/TemplateEditor';
 import Users from './pages/Users';
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/users" element={<Users />} />
           <Route path="/categories" element={<Categories />} />
+          <Route path="/subcategories" element={<Subcategories />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/languages" element={<Languages />} />
           <Route path="/subscriptions" element={<SubscriptionPlans />} />
