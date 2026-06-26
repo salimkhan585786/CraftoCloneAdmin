@@ -34,8 +34,8 @@ interface TextFieldConfig {
   visible: boolean;
   content: string;
   position: { x: number; y: number };
-  userOffset: { x: number; y: number };
-  userScale: number;
+  userOffset?: { x: number; y: number };
+  userScale?: number;
   width: number;
   fontSize: number;
   fontFamily: string;
@@ -63,8 +63,8 @@ const ANIMATION_DEFINITIONS: AnimationDef[] = [
 ];
 
 const TEMPLATE_CANVAS_WIDTH = 270;
-const DEFAULT_OUTPUT_WIDTH = 1080;
-const DEFAULT_OUTPUT_HEIGHT = 1920;
+const DEFAULT_OUTPUT_WIDTH = 300;
+const DEFAULT_OUTPUT_HEIGHT = 300;
 const MIN_BANNER_SCALE = 1;
 const MAX_BANNER_SCALE = 4;
 const MIN_FRAME_SIZE = 10;
@@ -73,11 +73,9 @@ const MAX_FRAME_SIZE = 270;
 const defaultTextFieldName: TextFieldConfig = {
   visible: true,
   content: '{{name}}',
-  position: { x: 60, y: 1100 },
-  userOffset: { x: 0, y: 0 },
-  userScale: 1.0,
-  width: 960,
-  fontSize: 64,
+  position: { x: 40, y: 180 },
+  width: 240,
+  fontSize: 28,
   fontFamily: 'Poppins',
   fontWeight: 'bold',
   color: '#FFFFFF',
@@ -90,11 +88,9 @@ const defaultTextFieldName: TextFieldConfig = {
 const defaultTextFieldMessage: TextFieldConfig = {
   visible: true,
   content: '{{message}}',
-  position: { x: 60, y: 1200 },
-  userOffset: { x: 0, y: 0 },
-  userScale: 1.0,
-  width: 960,
-  fontSize: 36,
+  position: { x: 40, y: 230 },
+  width: 240,
+  fontSize: 20,
   fontFamily: 'Inter',
   fontWeight: 'normal',
   color: '#EEEEEE',
@@ -348,6 +344,10 @@ function getUploadedMediaSize(file: File) {
 }
 
 async function shouldProceedWithMedia(_file: File) {
+  const { width, height } = await getUploadedMediaSize(_file);
+  if (width !== 300 || height !== 300) {
+    throw new Error('Only 300×300 media is allowed.');
+  }
   return true;
 }
 
@@ -515,13 +515,18 @@ export default function TemplateEditor() {
 
     const config = (template.config_json ?? {}) as Record<string, unknown>;
 
-    const configWidth = typeof config.width === 'number' ? config.width : DEFAULT_OUTPUT_WIDTH;
-    const configHeight = typeof config.height === 'number' ? config.height : DEFAULT_OUTPUT_HEIGHT;
+    const canvas = config.template as Record<string, unknown> | undefined;
+    const canvasObj = canvas?.canvas as Record<string, unknown> | undefined;
+    const configWidth = typeof canvasObj?.width === 'number' ? canvasObj.width : typeof config.width === 'number' ? config.width : DEFAULT_OUTPUT_WIDTH;
+    const configHeight = typeof canvasObj?.height === 'number' ? canvasObj.height : typeof config.height === 'number' ? config.height : DEFAULT_OUTPUT_HEIGHT;
     setMediaDimensions({ width: configWidth, height: configHeight });
 
     const localFrameScale = configWidth / TEMPLATE_CANVAS_WIDTH;
 
     const maybeFrame = (config.photoFrame ?? config.photo_frame) as Record<string, unknown> | undefined;
+    if (maybeFrame && maybeFrame.shape === 'rect') {
+      maybeFrame.shape = 'rectangle';
+    }
     const maybeBackgroundCrop = config.background_crop as Record<string, unknown> | undefined;
 
     if (isPhotoFrame(maybeFrame)) {
@@ -826,9 +831,6 @@ export default function TemplateEditor() {
   ): TemplatePayload => {
     const nextConfig: Record<string, unknown> = { ...(existingConfigJson ?? {}) };
 
-    nextConfig.width = outputWidth;
-    nextConfig.height = outputHeight;
-
     nextConfig.photoFrame = {
       x: Math.round(frame.x * FRAME_SCALE),
       y: Math.round(frame.y * FRAME_SCALE),
@@ -836,8 +838,8 @@ export default function TemplateEditor() {
       height: Math.round(frame.height * FRAME_SCALE),
       borderColor: '#FFFFFF',
       borderWidth: 3,
-      shape: frame.shape,
-      animation: { id: photoFrameAnimation, config: {} },
+      shape: frame.shape === 'rectangle' ? 'rect' : frame.shape,
+      animation: { id: photoFrameAnimation },
     };
     delete nextConfig.photo_frame;
     delete nextConfig.background_crop;
@@ -857,13 +859,11 @@ export default function TemplateEditor() {
         visible: textFieldName.visible,
         content: textFieldName.content,
         position: {
-          x: Math.round(textFieldName.position.x * FRAME_SCALE),
-          y: Math.round(textFieldName.position.y * FRAME_SCALE),
+          x: Math.max(0, Math.min(Math.round(textFieldName.position.x), outputWidth - Math.round(textFieldName.width))),
+          y: Math.max(0, Math.min(Math.round(textFieldName.position.y), outputHeight - Math.round(textFieldName.fontSize))),
         },
-        userOffset: textFieldName.userOffset,
-        userScale: textFieldName.userScale,
-        width: Math.round(textFieldName.width * FRAME_SCALE),
-        fontSize: Math.round(textFieldName.fontSize * FRAME_SCALE),
+        width: Math.min(outputWidth, Math.round(textFieldName.width)),
+        fontSize: Math.min(36, Math.round(textFieldName.fontSize)),
         fontFamily: textFieldName.fontFamily,
         fontWeight: textFieldName.fontWeight,
         color: textFieldName.color,
@@ -876,13 +876,11 @@ export default function TemplateEditor() {
         visible: textFieldMessage.visible,
         content: textFieldMessage.content,
         position: {
-          x: Math.round(textFieldMessage.position.x * FRAME_SCALE),
-          y: Math.round(textFieldMessage.position.y * FRAME_SCALE),
+          x: Math.max(0, Math.min(Math.round(textFieldMessage.position.x), outputWidth - Math.round(textFieldMessage.width))),
+          y: Math.max(0, Math.min(Math.round(textFieldMessage.position.y), outputHeight - Math.round(textFieldMessage.fontSize))),
         },
-        userOffset: textFieldMessage.userOffset,
-        userScale: textFieldMessage.userScale,
-        width: Math.round(textFieldMessage.width * FRAME_SCALE),
-        fontSize: Math.round(textFieldMessage.fontSize * FRAME_SCALE),
+        width: Math.min(outputWidth, Math.round(textFieldMessage.width)),
+        fontSize: Math.min(36, Math.round(textFieldMessage.fontSize)),
         fontFamily: textFieldMessage.fontFamily,
         fontWeight: textFieldMessage.fontWeight,
         color: textFieldMessage.color,
@@ -897,19 +895,17 @@ export default function TemplateEditor() {
       nextConfig.backgroundOverlay = { enabled: true, color: 'rgba(0, 0, 0, 0.3)', opacity: 0.3 };
     }
 
-    if (!nextConfig.output) {
-      nextConfig.output = {
-        format: templateType === 'VIDEO' ? 'MP4' : 'JPEG',
-        quality: 'high',
-        width: outputWidth,
-        height: outputHeight,
-        ...(templateType === 'VIDEO' ? { fps: 30, duration: 10 } : {}),
-      };
+    nextConfig.output = {
+      format: templateType === 'VIDEO' ? 'MP4' : 'JPEG',
+      quality: 'high',
+      fps: templateType === 'VIDEO' ? 30 : 1,
+      duration: 10,
+      includeAnimation: true,
+    };
+
+    if (Object.keys(variableValues).length > 0) {
+      nextConfig.templateVariables = { ...variableValues };
     }
-
-    nextConfig.variables = templateVariables;
-
-    nextConfig.templateVariables = { ...variableValues };
 
     if (templateType === 'VIDEO' && !nextConfig.animation) {
       const photoFrameAnimDef = ANIMATION_DEFINITIONS.find((a) => a.id === photoFrameAnimation);
@@ -1298,7 +1294,7 @@ export default function TemplateEditor() {
                         ref={textNameRef}
                         x={textFieldName.position.x / FRAME_SCALE}
                         y={textFieldName.position.y / FRAME_SCALE}
-                        text={textFieldName.content}
+                        text={variableValues['name'] || textFieldName.content}
                         fontSize={textFieldName.fontSize / FRAME_SCALE}
                         fontFamily={textFieldName.fontFamily}
                         fontStyle={`${textFieldName.bold ? 'bold ' : ''}${textFieldName.italic ? 'italic ' : ''}`.trim() || 'normal'}
@@ -1317,11 +1313,13 @@ export default function TemplateEditor() {
                           setSelected(false);
                         }}
                         onDragEnd={(e) => {
+                          const newX = Math.round(e.target.x() * FRAME_SCALE);
+                          const newY = Math.round(e.target.y() * FRAME_SCALE);
                           setTextFieldName((prev) => ({
                             ...prev,
                             position: {
-                              x: Math.round(e.target.x() * FRAME_SCALE),
-                              y: Math.round(e.target.y() * FRAME_SCALE),
+                              x: Math.max(0, Math.min(newX, outputWidth - Math.round(prev.width))),
+                              y: Math.max(0, Math.min(newY, outputHeight - Math.round(prev.fontSize))),
                             },
                           }));
                         }}
@@ -1333,7 +1331,7 @@ export default function TemplateEditor() {
                         ref={textMessageRef}
                         x={textFieldMessage.position.x / FRAME_SCALE}
                         y={textFieldMessage.position.y / FRAME_SCALE}
-                        text={textFieldMessage.content}
+                        text={variableValues['message'] || textFieldMessage.content}
                         fontSize={textFieldMessage.fontSize / FRAME_SCALE}
                         fontFamily={textFieldMessage.fontFamily}
                         fontStyle={`${textFieldMessage.bold ? 'bold ' : ''}${textFieldMessage.italic ? 'italic ' : ''}`.trim() || 'normal'}
@@ -1352,11 +1350,13 @@ export default function TemplateEditor() {
                           setSelected(false);
                         }}
                         onDragEnd={(e) => {
+                          const newX = Math.round(e.target.x() * FRAME_SCALE);
+                          const newY = Math.round(e.target.y() * FRAME_SCALE);
                           setTextFieldMessage((prev) => ({
                             ...prev,
                             position: {
-                              x: Math.round(e.target.x() * FRAME_SCALE),
-                              y: Math.round(e.target.y() * FRAME_SCALE),
+                              x: Math.max(0, Math.min(newX, outputWidth - Math.round(prev.width))),
+                              y: Math.max(0, Math.min(newY, outputHeight - Math.round(prev.fontSize))),
                             },
                           }));
                         }}
@@ -1368,7 +1368,6 @@ export default function TemplateEditor() {
                         ref={textTrRef}
                         keepRatio={false}
                         enabledAnchors={[]}
-                        boundBoxFunc={(oldBox, newBox) => newBox}
                       />
                     )}
                   </Layer>
@@ -1788,9 +1787,9 @@ export default function TemplateEditor() {
                             <input
                               type="number"
                               min={8}
-                              max={200}
+                              max={36}
                               value={field.fontSize}
-                              onChange={(e) => setField((prev) => ({ ...prev, fontSize: Number(e.target.value) }))}
+                              onChange={(e) => setField((prev) => ({ ...prev, fontSize: Math.min(36, Number(e.target.value)) }))}
                               onClick={(e) => e.stopPropagation()}
                               className="w-full mt-0.5 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-[11px] font-mono focus:outline-none"
                             />
@@ -1926,6 +1925,25 @@ export default function TemplateEditor() {
                     <span className="text-sm font-mono font-bold text-zinc-900">{Math.round((frame.radius || 0) * FRAME_SCALE)}px</span>
                   </div>
                 )}
+                <div className="border-t border-zinc-200 pt-3 mt-3">
+                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 block">Text Fields</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Name X</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(textFieldName.position.x)}px</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Name Y</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(textFieldName.position.y)}px</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Message X</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(textFieldMessage.position.x)}px</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <span className="text-xs font-bold text-zinc-500">Message Y</span>
+                  <span className="text-sm font-mono font-bold text-zinc-900">{Math.round(textFieldMessage.position.y)}px</span>
+                </div>
               </div>
             </section>
             </div>

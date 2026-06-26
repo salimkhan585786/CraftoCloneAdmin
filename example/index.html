@@ -1271,8 +1271,6 @@ async function uploadFile(category, inputId, prefix) {
 // ═══════════════════════════════════════════════════════════════════
 const PRESETS = {
   'diwali-image': {
-    "width": 1080,
-    "height": 1920,
     "background": "#DDE5EC",
     "template": {
       "canvas": { "width": 1080, "height": 1920 },
@@ -1292,8 +1290,6 @@ const PRESETS = {
         "visible": true,
         "content": "{{name}}",
         "position": { "x": 60, "y": 1100 },
-        "userOffset": { "x": 0, "y": 0 },
-        "userScale": 1.0,
         "width": 960, "fontSize": 64,
         "fontFamily": "Poppins", "fontWeight": "bold",
         "color": "#FFFFFF", "align": "center",
@@ -1303,8 +1299,6 @@ const PRESETS = {
         "visible": true,
         "content": "{{message}}",
         "position": { "x": 60, "y": 1200 },
-        "userOffset": { "x": 0, "y": 0 },
-        "userScale": 1.0,
         "width": 960, "fontSize": 36,
         "fontFamily": "Inter", "fontWeight": "normal",
         "color": "#EEEEEE", "align": "center",
@@ -1334,7 +1328,6 @@ const PRESETS = {
     ]
   },
   'diwali-video': {
-    "width": 1080, "height": 1920,
     "template": { "canvas": { "width": 1080, "height": 1920 }, "accentColor": "#0D62DF" },
     "photoFrame": {
       "x": 140, "y": 200,
@@ -1345,13 +1338,13 @@ const PRESETS = {
     "textFields": {
       "name": {
         "visible": true, "content": "{{name}}",
-        "position": { "x": 60, "y": 1100 }, "userOffset": { "x": 0, "y": 0 }, "userScale": 1.0,
+        "position": { "x": 60, "y": 1100 },
         "width": 960, "fontSize": 64, "fontFamily": "Poppins", "fontWeight": "bold",
         "color": "#FFFFFF", "align": "center", "bold": true, "italic": false, "shadow": false
       },
       "message": {
         "visible": true, "content": "{{message}}",
-        "position": { "x": 60, "y": 1200 }, "userOffset": { "x": 0, "y": 0 }, "userScale": 1.0,
+        "position": { "x": 60, "y": 1200 },
         "width": 960, "fontSize": 36, "fontFamily": "Inter", "fontWeight": "normal",
         "color": "#EEEEEE", "align": "center", "bold": false, "italic": false, "shadow": false
       }
@@ -1368,7 +1361,6 @@ const PRESETS = {
     ]
   },
   'minimal': {
-    "width": 1080, "height": 1920,
     "background": "#ffffff",
     "layers": [
       { "id": "headline", "type": "text", "x": 60, "y": 900, "width": 960, "text": "{{headline}}", "fontSize": 72, "fontFamily": "Poppins", "fontWeight": "bold", "color": "#111827", "align": "center" },
@@ -1494,10 +1486,10 @@ async function generateMedia() {
     template: { canvas: { width: 1080, height: 1920 }, accentColor: '#0D62DF', backgroundColor: '#DDE5EC' },
     media: photo ? { frameOverlaySource: '' } : {},
     userContent: { photo: photo || undefined, name, message, isPremium: true },
-    photoFrame: { x: 140, y: 200, width: 800, height: 800, borderColor: '#FFFFFF', borderWidth: 3, shape, animation: { id: animId, config: {} } },
+    photoFrame: { x: 140, y: 200, width: 800, height: 800, borderColor: '#FFFFFF', borderWidth: 3, shape, animation: { id: animId } },
     textFields: {
-      name: { visible: true, content: name, position: { x: 60, y: 1100 }, userOffset: { x: 0, y: 0 }, userScale: 1.05, width: 960, fontSize: 64, fontFamily: 'Poppins', fontWeight: 'bold', color: '#FFFFFF', align: 'center', bold: true, italic: false, shadow: false },
-      message: { visible: true, content: message, position: { x: 60, y: 1200 }, userOffset: { x: 0, y: 0 }, userScale: 1.0, width: 960, fontSize: 36, fontFamily: 'Inter', fontWeight: 'normal', color: '#EEEEEE', align: 'center', bold: false, italic: false, shadow: false }
+      name: { visible: true, content: name, position: { x: 60, y: 1100 }, width: 960, fontSize: 64, fontFamily: 'Poppins', fontWeight: 'bold', color: '#FFFFFF', align: 'center', bold: true, italic: false, shadow: false },
+      message: { visible: true, content: message, position: { x: 60, y: 1200 }, width: 960, fontSize: 36, fontFamily: 'Inter', fontWeight: 'normal', color: '#EEEEEE', align: 'center', bold: false, italic: false, shadow: false }
     },
     backgroundOverlay: { enabled: true, color: 'rgba(0, 0, 0, 0.3)', opacity: 0.3 },
     stickers: state.stickers,
