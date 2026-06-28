@@ -33,11 +33,10 @@ interface AnimationDef {
 interface TextFieldConfig {
   visible: boolean;
   content: string;
-  position: { x: number; y: number };
-  userOffset?: { x: number; y: number };
-  userScale?: number;
-  width: number;
-  fontSize: number;
+    position: { x: number; y: number };
+    userOffset?: { x: number; y: number };
+    userScale?: number;
+    fontSize: number;
   fontFamily: string;
   fontWeight: string;
   color: string;
@@ -73,9 +72,8 @@ const MAX_FRAME_SIZE = 270;
 const defaultTextFieldName: TextFieldConfig = {
   visible: true,
   content: '{{name}}',
-  position: { x: 40, y: 180 },
-  width: 240,
-  fontSize: 28,
+  position: { x: 36, y: 162 },
+  fontSize: 25,
   fontFamily: 'Poppins',
   fontWeight: 'bold',
   color: '#FFFFFF',
@@ -88,9 +86,8 @@ const defaultTextFieldName: TextFieldConfig = {
 const defaultTextFieldMessage: TextFieldConfig = {
   visible: true,
   content: '{{message}}',
-  position: { x: 40, y: 230 },
-  width: 240,
-  fontSize: 20,
+  position: { x: 36, y: 207 },
+  fontSize: 18,
   fontFamily: 'Inter',
   fontWeight: 'normal',
   color: '#EEEEEE',
@@ -562,14 +559,12 @@ export default function TemplateEditor() {
     if (tf) {
       if (tf.name && typeof tf.name === 'object') {
         const n = tf.name as Record<string, unknown>;
+        const nPos = (n.position && typeof n.position === 'object') ? n.position as { x: number; y: number } : defaultTextFieldName.position;
         setTextFieldName({
           visible: Boolean(n.visible ?? true),
           content: typeof n.content === 'string' ? n.content : '{{name}}',
-          position: (n.position && typeof n.position === 'object') ? n.position as { x: number; y: number } : defaultTextFieldName.position,
-          userOffset: (n.userOffset && typeof n.userOffset === 'object') ? n.userOffset as { x: number; y: number } : { x: 0, y: 0 },
-          userScale: typeof n.userScale === 'number' ? n.userScale : 1.0,
-          width: typeof n.width === 'number' ? n.width : defaultTextFieldName.width,
-          fontSize: typeof n.fontSize === 'number' ? n.fontSize : defaultTextFieldName.fontSize,
+          position: { x: (nPos.x ?? 0) / localFrameScale, y: (nPos.y ?? 0) / localFrameScale },
+          fontSize: typeof n.fontSize === 'number' ? n.fontSize / localFrameScale : defaultTextFieldName.fontSize,
           fontFamily: typeof n.fontFamily === 'string' ? n.fontFamily : defaultTextFieldName.fontFamily,
           fontWeight: typeof n.fontWeight === 'string' ? n.fontWeight : defaultTextFieldName.fontWeight,
           color: typeof n.color === 'string' ? n.color : defaultTextFieldName.color,
@@ -581,14 +576,12 @@ export default function TemplateEditor() {
       }
       if (tf.message && typeof tf.message === 'object') {
         const m = tf.message as Record<string, unknown>;
+        const mPos = (m.position && typeof m.position === 'object') ? m.position as { x: number; y: number } : defaultTextFieldMessage.position;
         setTextFieldMessage({
           visible: Boolean(m.visible ?? true),
           content: typeof m.content === 'string' ? m.content : '{{message}}',
-          position: (m.position && typeof m.position === 'object') ? m.position as { x: number; y: number } : defaultTextFieldMessage.position,
-          userOffset: (m.userOffset && typeof m.userOffset === 'object') ? m.userOffset as { x: number; y: number } : { x: 0, y: 0 },
-          userScale: typeof m.userScale === 'number' ? m.userScale : 1.0,
-          width: typeof m.width === 'number' ? m.width : defaultTextFieldMessage.width,
-          fontSize: typeof m.fontSize === 'number' ? m.fontSize : defaultTextFieldMessage.fontSize,
+          position: { x: (mPos.x ?? 0) / localFrameScale, y: (mPos.y ?? 0) / localFrameScale },
+          fontSize: typeof m.fontSize === 'number' ? m.fontSize / localFrameScale : defaultTextFieldMessage.fontSize,
           fontFamily: typeof m.fontFamily === 'string' ? m.fontFamily : defaultTextFieldMessage.fontFamily,
           fontWeight: typeof m.fontWeight === 'string' ? m.fontWeight : defaultTextFieldMessage.fontWeight,
           color: typeof m.color === 'string' ? m.color : defaultTextFieldMessage.color,
@@ -859,11 +852,10 @@ export default function TemplateEditor() {
         visible: textFieldName.visible,
         content: textFieldName.content,
         position: {
-          x: Math.max(0, Math.min(Math.round(textFieldName.position.x), outputWidth - Math.round(textFieldName.width))),
-          y: Math.max(0, Math.min(Math.round(textFieldName.position.y), outputHeight - Math.round(textFieldName.fontSize))),
+          x: Math.max(0, Math.min(Math.round(textFieldName.position.x * FRAME_SCALE), outputWidth)),
+          y: Math.max(0, Math.min(Math.round(textFieldName.position.y * FRAME_SCALE), outputHeight)),
         },
-        width: Math.min(outputWidth, Math.round(textFieldName.width)),
-        fontSize: Math.min(36, Math.round(textFieldName.fontSize)),
+        fontSize: Math.min(36, Math.round(textFieldName.fontSize * FRAME_SCALE)),
         fontFamily: textFieldName.fontFamily,
         fontWeight: textFieldName.fontWeight,
         color: textFieldName.color,
@@ -876,11 +868,10 @@ export default function TemplateEditor() {
         visible: textFieldMessage.visible,
         content: textFieldMessage.content,
         position: {
-          x: Math.max(0, Math.min(Math.round(textFieldMessage.position.x), outputWidth - Math.round(textFieldMessage.width))),
-          y: Math.max(0, Math.min(Math.round(textFieldMessage.position.y), outputHeight - Math.round(textFieldMessage.fontSize))),
+          x: Math.max(0, Math.min(Math.round(textFieldMessage.position.x * FRAME_SCALE), outputWidth)),
+          y: Math.max(0, Math.min(Math.round(textFieldMessage.position.y * FRAME_SCALE), outputHeight)),
         },
-        width: Math.min(outputWidth, Math.round(textFieldMessage.width)),
-        fontSize: Math.min(36, Math.round(textFieldMessage.fontSize)),
+        fontSize: Math.min(36, Math.round(textFieldMessage.fontSize * FRAME_SCALE)),
         fontFamily: textFieldMessage.fontFamily,
         fontWeight: textFieldMessage.fontWeight,
         color: textFieldMessage.color,
@@ -898,7 +889,7 @@ export default function TemplateEditor() {
     nextConfig.output = {
       format: templateType === 'VIDEO' ? 'MP4' : 'JPEG',
       quality: 'high',
-      fps: templateType === 'VIDEO' ? 30 : 1,
+      fps: 30,
       duration: 10,
       includeAnimation: true,
     };
@@ -1292,15 +1283,14 @@ export default function TemplateEditor() {
                     {textFieldName.visible && (
                       <Text
                         ref={textNameRef}
-                        x={textFieldName.position.x / FRAME_SCALE}
-                        y={textFieldName.position.y / FRAME_SCALE}
+                        x={textFieldName.position.x}
+                        y={textFieldName.position.y}
                         text={variableValues['name'] || textFieldName.content}
-                        fontSize={textFieldName.fontSize / FRAME_SCALE}
+                        fontSize={textFieldName.fontSize}
                         fontFamily={textFieldName.fontFamily}
                         fontStyle={`${textFieldName.bold ? 'bold ' : ''}${textFieldName.italic ? 'italic ' : ''}`.trim() || 'normal'}
                         fill={textFieldName.color}
                         align={textFieldName.align as any}
-                        width={textFieldName.width / FRAME_SCALE}
                         draggable={editorMode === 'frame'}
                         onClick={() => {
                           setEditorMode('frame');
@@ -1313,13 +1303,11 @@ export default function TemplateEditor() {
                           setSelected(false);
                         }}
                         onDragEnd={(e) => {
-                          const newX = Math.round(e.target.x() * FRAME_SCALE);
-                          const newY = Math.round(e.target.y() * FRAME_SCALE);
                           setTextFieldName((prev) => ({
                             ...prev,
                             position: {
-                              x: Math.max(0, Math.min(newX, outputWidth - Math.round(prev.width))),
-                              y: Math.max(0, Math.min(newY, outputHeight - Math.round(prev.fontSize))),
+                              x: Math.round(e.target.x()),
+                              y: Math.round(e.target.y()),
                             },
                           }));
                         }}
@@ -1329,15 +1317,14 @@ export default function TemplateEditor() {
                     {textFieldMessage.visible && (
                       <Text
                         ref={textMessageRef}
-                        x={textFieldMessage.position.x / FRAME_SCALE}
-                        y={textFieldMessage.position.y / FRAME_SCALE}
+                        x={textFieldMessage.position.x}
+                        y={textFieldMessage.position.y}
                         text={variableValues['message'] || textFieldMessage.content}
-                        fontSize={textFieldMessage.fontSize / FRAME_SCALE}
+                        fontSize={textFieldMessage.fontSize}
                         fontFamily={textFieldMessage.fontFamily}
                         fontStyle={`${textFieldMessage.bold ? 'bold ' : ''}${textFieldMessage.italic ? 'italic ' : ''}`.trim() || 'normal'}
                         fill={textFieldMessage.color}
                         align={textFieldMessage.align as any}
-                        width={textFieldMessage.width / FRAME_SCALE}
                         draggable={editorMode === 'frame'}
                         onClick={() => {
                           setEditorMode('frame');
@@ -1350,13 +1337,11 @@ export default function TemplateEditor() {
                           setSelected(false);
                         }}
                         onDragEnd={(e) => {
-                          const newX = Math.round(e.target.x() * FRAME_SCALE);
-                          const newY = Math.round(e.target.y() * FRAME_SCALE);
                           setTextFieldMessage((prev) => ({
                             ...prev,
                             position: {
-                              x: Math.max(0, Math.min(newX, outputWidth - Math.round(prev.width))),
-                              y: Math.max(0, Math.min(newY, outputHeight - Math.round(prev.fontSize))),
+                              x: Math.round(e.target.x()),
+                              y: Math.round(e.target.y()),
                             },
                           }));
                         }}
